@@ -1,0 +1,13 @@
+# Environment and secrets
+.env
+
+# OSRM data — several GB, regenerate following the README
+osrm-data/
+
+# Internal documentation
+BACKLOG.md
+DECISIONS.md
+CLAUDE.md
+
+# macOS
+.DS_Store

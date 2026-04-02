@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>motorisk</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens ── */
+    :root {
+      --bg:           #111113;
+      --surface:      rgba(28,28,30,0.92);
+      --border:       rgba(255,255,255,0.10);
+      --text:         #f5f5f7;
+      --muted:        #98989d;
+      --accent-risk:  #ff453a;
+      --accent-route: #0a84ff;
+      --sans:  -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono:  'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+      --blur:  blur(20px) saturate(180%);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      font-family: var(--sans);
+      overflow: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* ── Map ── */
+    #map { position: fixed; inset: 0; z-index: 0; }
+
+    .leaflet-container { background: var(--bg); }
+
+    .leaflet-control-attribution {
+      background: var(--surface) !important;
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      color: var(--muted) !important;
+      font-size: 9px !important;
+      border: 0.5px solid var(--border) !important;
+      border-radius: 6px !important;
+    }
+
+    .leaflet-control-attribution a { color: var(--muted) !important; }
+
+    .leaflet-top.leaflet-left { top: 50px !important; left: 8px !important; }
+
+    .leaflet-control-zoom { border: none !important; }
+
+    .leaflet-control-zoom a {
+      background: var(--surface) !important;
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      color: var(--text) !important;
+      border: 0.5px solid var(--border) !important;
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      font-size: 16px !important;
+    }
+
+    .leaflet-control-zoom a:first-child { border-radius: 8px 8px 0 0 !important; }
+    .leaflet-control-zoom a:last-child  { border-radius: 0 0 8px 8px !important; border-top: none !important; }
+    .leaflet-control-zoom a:hover       { background: var(--bg) !important; }
+
+    /* ── Floating base ── */
+    .float { position: fixed; z-index: 1000; }
+
+    /* ── Brand chip ── */
+    #brand-group {
+      top: 16px; left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 13px 8px 20px;
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* ── Theme selector ── */
+    #btn-theme {
+      width: 32px; height: 32px;
+      border-radius: 30%;
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      transition: background 0.15s;
+    }
+
+    #btn-theme:hover { background: var(--bg); }
+
+    #theme-popover {
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      min-width: 188px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      display: none;
+      z-index: 1002;
+    }
+
+    #theme-popover.open {
+      display: block;
+      animation: popoverIn 0.15s ease;
+    }
+
+    @keyframes popoverIn {
+      from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .theme-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .theme-option:hover  { background: var(--border); }
+    .theme-option.active { background: var(--border); }
+
+    .theme-option-name {
+      flex: 1;
+      font-size: 11px;
+      color: var(--text);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .theme-dots { display: flex; gap: 3px; }
+
+    .theme-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .theme-divider {
+      height: 0.5px;
+      background: var(--border);
+      margin: 3px 0;
+    }
+
+    .theme-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-family: var(--mono);
+      padding: 6px 10px;
+    }
+
+    /* ── Bottom bar ── */
+    #bottom-bar {
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 6px 6px 14px;
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      border-radius: 999px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+    }
+
+    #bottom-bar.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+
+    #chip-info {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #chip-info strong { color: var(--text); font-weight: 500; }
+
+    #btn-analyze {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: var(--accent-route);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+
+    #btn-analyze.ready { display: flex; }
+    #btn-analyze:hover:not(:disabled) { opacity: 0.85; }
+    #btn-analyze:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    #btn-clear, #btn-close-panel {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: transparent;
+      border: 0.5px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    #btn-clear:hover, #btn-close-panel:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    /* ── Inline spinner ── */
+    .spin-sm {
+      width: 11px; height: 11px;
+      border: 1.5px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results panel ── */
+    #results-panel {
+      top: 0; right: 0;
+      width: 300px; height: 100%;
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border-left: 0.5px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateX(100%);
+      transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 1001;
+    }
+
+    #results-panel.open { transform: translateX(0); }
+
+    #panel-header {
+      padding: 20px 16px 14px;
+      border-bottom: 0.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    #panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.01em;
+    }
+
+    #panel-subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    #results-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #results-list::-webkit-scrollbar { width: 4px; }
+    #results-list::-webkit-scrollbar-track { background: transparent; }
+    #results-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Segment card ── */
+    .segment-card {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      transition: background 0.15s;
+      animation: fadeSlideIn 0.25s ease both;
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .segment-card:hover { background: var(--border); }
+
+    .seg-dot {
+      flex-shrink: 0;
+      margin-top: 1px;
+      color: var(--accent-risk);
+    }
+
+    .seg-body { flex: 1; min-width: 0; }
+
+    .seg-road {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .seg-province {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .seg-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 5px;
+      line-height: 1.7;
+    }
+
+    .seg-meta span { color: var(--text); }
+
+    /* ── Panel footer ── */
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 0.5px solid var(--border);
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Panel sections ── */
+    .panel-section {
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 6px;
+      flex-shrink: 0;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.01em;
+    }
+
+    .section-subtitle {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .section-list {
+      overflow-y: auto;
+      padding: 0 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .section-list::-webkit-scrollbar { width: 4px; }
+    .section-list::-webkit-scrollbar-track { background: transparent; }
+    .section-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .section-divider { height: 0.5px; background: var(--border); flex-shrink: 0; }
+
+    .section-info {
+      flex: 1;
+      cursor: pointer;
+      user-select: none;
+      min-width: 0;
+    }
+
+    .chevron {
+      vertical-align: middle;
+      margin-left: 3px;
+      transition: transform 0.2s ease;
+      color: var(--muted);
+    }
+
+    .panel-section.collapsed .chevron { transform: rotate(-90deg); }
+
+    .panel-section.collapsed .section-list { display: none; }
+
+    .btn-eye {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 2px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: color 0.15s;
+      margin-top: 1px;
+    }
+
+    .btn-eye:hover { color: var(--text); }
+    .btn-eye.active { color: var(--text); }
+
+    /* ── Weather card ── */
+    .weather-card {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      animation: fadeSlideIn 0.25s ease both;
+    }
+
+    .weather-loc {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: var(--mono);
+      margin-bottom: 2px;
+    }
+
+    .weather-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .weather-row span { color: var(--text); }
+
+    .wind-arrow {
+      display: inline-block;
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    /* ── Map tooltips ── */
+    .leaflet-tooltip {
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 6px 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .leaflet-tooltip::before { display: none; }
+
+    /* ── Risk segment pulse ── */
+    @keyframes riskPulse {
+      0%   { stroke-opacity: 1; stroke-width: 4; }
+      50%  { stroke-opacity: 0.5; stroke-width: 6; }
+      100% { stroke-opacity: 1; stroke-width: 4; }
+    }
+
+    .risk-path { animation: riskPulse 2s ease-in-out infinite; }
+
+    /* ── Point marker ── */
+    @keyframes pointAppear {
+      from { transform: scale(0); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Brand chip + theme selector -->
+<div id="brand-group" class="float">
+  <div id="brand"><div style="display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:500;letter-spacing:-0.02em;color:var(--text);">
+    motorisk
+    <svg width="12" height="12" viewBox="0 0 24 24" style="animation:spin 8s linear infinite;flex-shrink:0;">
+      <line x1="12" y1="3" x2="12" y2="21" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="19.8" y1="7.5" x2="4.2" y2="16.5" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="4.2" y1="7.5" x2="19.8" y2="16.5" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+  </div></div>
+  <button id="btn-theme" aria-label="Cambiar tema">
+    <span id="theme-abbr"></span>
+  </button>
+</div>
+<div id="theme-popover" class="float"></div>
+
+<!-- Bottom bar -->
+<div id="bottom-bar" class="float">
+  <div id="chip-info"></div>
+  <button id="btn-analyze">Analizar ruta</button>
+  <button id="btn-clear" aria-label="Limpiar ruta">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Results panel -->
+<div id="results-panel" class="float">
+  <div id="panel-header">
+    <div id="panel-title">Análisis de ruta</div>
+    <button id="btn-close-panel" aria-label="Cerrar panel">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  </div>
+
+  <div id="results-list">
+  <div class="panel-section" id="section-risk">
+    <div class="section-header">
+      <div class="section-info" id="hdr-risk">
+        <div class="section-title">
+          Tramos de riesgo
+          <svg class="chevron" width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="section-subtitle" id="risk-subtitle"></div>
+      </div>
+      <button class="btn-eye active" id="btn-toggle-risk" aria-label="Mostrar/ocultar tramos"></button>
+    </div>
+    <div class="section-list" id="risk-list"></div>
+  </div>
+
+  <div class="section-divider"></div>
+
+  <div class="panel-section" id="section-weather">
+    <div class="section-header">
+      <div class="section-info" id="hdr-weather">
+        <div class="section-title">
+          Condiciones meteorológicas
+          <svg class="chevron" width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="section-subtitle" id="weather-subtitle"></div>
+      </div>
+      <button class="btn-eye active" id="btn-toggle-weather" aria-label="Mostrar/ocultar meteorología"></button>
+    </div>
+    <div class="section-list" id="weather-list"></div>
+  </div>
+  </div>
+
+  <div id="panel-footer">Datos: DGT · Open-Meteo</div>
+</div>
+
+<script>
+const OSRM = 'http://192.168.64.2:5000';
+const API  = 'http://localhost:8080';
+
+// ── Themes ─────────────────────────────────────────────────────────────────
+
+const THEMES = {
+  // Suzuki blue/white 1986 livery — blue surface glass on light bg
+  suzukiGSXR: {
+    name: 'Suzuki GSX-R750',
+    abbr: 'GSXR',
+    year: '1986',
+    mode: 'light',
+    tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    bg: '#edf0f8',
+    surface: 'rgba(26,58,138,0.10)',
+    text: '#080c1a',
+    muted: '#4a5880',
+    border: 'rgba(26,58,138,0.14)',
+    risk: '#cc1a00',
+    route: '#1a3a8a',
+  },
+  // Honda CB750 — candy chrome gold, warm ivory bg
+  hondaCB750: {
+    name: 'Honda CB750',
+    abbr: 'CB750',
+    year: '1969',
+    mode: 'light',
+    tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    bg: '#f7f3e8',
+    surface: 'rgba(139,105,20,0.12)',
+    text: '#141008',
+    muted: '#7a6030',
+    border: 'rgba(139,105,20,0.16)',
+    risk: '#9B1C1C',
+    route: '#8b6914',
+  },
+  // BMW M colors — blue dominant, M red accent, clean white bg
+  bmwM1000RR: {
+    name: 'BMW M1000RR',
+    abbr: 'M RR',
+    year: '2021',
+    mode: 'light',
+    tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    bg: '#f0f4f8',
+    surface: 'rgba(0,102,177,0.10)',
+    text: '#060c14',
+    muted: '#406080',
+    border: 'rgba(0,102,177,0.14)',
+    risk: '#E22718',
+    route: '#0066B1',
+  },  
+  // Arancio Laverda — signature Italian orange, warm dark bg
+  laverda750SF: {
+    name: 'Laverda 750 SF',
+    abbr: 'L750',
+    year: '1969',
+    mode: 'dark',
+    tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    bg: '#0f0800',
+    surface: 'rgba(244,121,32,0.18)',
+    text: '#faeee0',
+    muted: '#9a6a38',
+    border: 'rgba(244,121,32,0.22)',
+    risk: '#c0392b',
+    route: '#F47920',
+  },
+  // Rosso Corsa body, oro Marchesini wheels — deep red-black bg, red surface glass
+  ducati916: {
+    name: 'Ducati 916',
+    abbr: 'D916',
+    year: '1994',
+    mode: 'dark',
+    tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    bg: '#0e0900',
+    surface: 'rgba(212,0,0,0.18)',
+    text: '#f5edd8',
+    muted: '#8a2020',
+    border: 'rgba(212,0,0,0.20)',
+    risk: '#C8A040',
+    route: '#D40000',
+  },
+  // Kawasaki lime green — dark green-black bg, green surface glass
+  kawasakiH2R: {
+    name: 'Kawasaki H2R',
+    abbr: 'H2R',
+    year: '2015',
+    mode: 'dark',
+    tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    bg: '#030a04',
+    surface: 'rgba(75,158,0,0.18)',
+    text: '#e0f0e0',
+    muted: '#4a7a50',
+    border: 'rgba(75,158,0,0.22)',
+    risk: '#d40000',
+    route: '#4B9E00',
+  },
+
+};
+
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const defaultTheme = systemDark ? 'laverda750SF' : 'suzukiGSXR';
+let currentThemeKey = localStorage.getItem('moto-risk-theme') || defaultTheme;
+
+function applyThemeCSSVars(theme) {
+  const root = document.documentElement;
+  root.style.setProperty('--bg',           theme.bg);
+  root.style.setProperty('--surface',      theme.surface);
+  root.style.setProperty('--text',         theme.text);
+  root.style.setProperty('--muted',        theme.muted);
+  root.style.setProperty('--border',       theme.border);
+  root.style.setProperty('--accent-risk',  theme.risk);
+  root.style.setProperty('--accent-route', theme.route);
+}
+
+// Apply initial theme vars before map init to avoid flash
+applyThemeCSSVars(THEMES[currentThemeKey] || THEMES.ducati916);
+
+const map = L.map('map', { zoomControl: true }).setView([40.4, -3.7], 6);
+
+let tileLayer = L.tileLayer((THEMES[currentThemeKey] || THEMES.ducati916).tiles, {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19,
+}).addTo(map);
+
+function applyTheme(key) {
+  const theme = THEMES[key];
+  if (!theme) return;
+  currentThemeKey = key;
+  applyThemeCSSVars(theme);
+  tileLayer.setUrl(theme.tiles);
+  segments.forEach(s => { if (s) s.layer.setStyle({ color: theme.route }); });
+  riskLayers.forEach(l => l.setStyle({ color: theme.risk }));
+  weatherMarkers.forEach(m => {
+    const c = m.options.alert ? theme.risk : theme.route;
+    m.setStyle({ color: c, fillColor: c });
+  });
+  waypoints.forEach(w => w.marker.setIcon(makePointIcon()));
+  document.getElementById('theme-abbr').textContent = theme.abbr;
+  document.querySelectorAll('.theme-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === key);
+  });
+  localStorage.setItem('moto-risk-theme', key);
+}
+
+// ── DOM ────────────────────────────────────────────────────────────────────
+
+const btnTheme       = document.getElementById('btn-theme');
+const bottomBar      = document.getElementById('bottom-bar');
+const chipInfo       = document.getElementById('chip-info');
+const btnAnalyze     = document.getElementById('btn-analyze');
+const btnClear       = document.getElementById('btn-clear');
+const resultsPanel   = document.getElementById('results-panel');
+const btnClosePanel  = document.getElementById('btn-close-panel');
+const themePopover   = document.getElementById('theme-popover');
+const riskSubtitle   = document.getElementById('risk-subtitle');
+const riskList       = document.getElementById('risk-list');
+const weatherSubtitle = document.getElementById('weather-subtitle');
+const weatherList    = document.getElementById('weather-list');
+const btnToggleRisk  = document.getElementById('btn-toggle-risk');
+const btnToggleWeather = document.getElementById('btn-toggle-weather');
+
+// Build theme popover
+(function buildPopover() {
+  const darkKeys  = ['laverda750SF', 'ducati916', 'kawasakiH2R'];
+  const lightKeys = ['suzukiGSXR', 'hondaCB750', 'bmwM1000RR'];
+
+  function makeOption(key) {
+    const t   = THEMES[key];
+    const div = document.createElement('div');
+    div.className = 'theme-option';
+    div.dataset.key = key;
+    if (key === currentThemeKey) div.classList.add('active');
+    div.innerHTML = `
+      <span class="theme-option-name">${t.name} · ${t.year}</span>
+      <div class="theme-dots">
+        <div class="theme-dot" style="background:${t.route}"></div>
+        <div class="theme-dot" style="background:${t.risk}"></div>
+      </div>`;
+    div.addEventListener('click', () => {
+      applyTheme(key);
+      themePopover.classList.remove('open');
+    });
+    return div;
+  }
+
+  function makeLabel(text) {
+    const el = document.createElement('div');
+    el.className = 'theme-label';
+    el.textContent = text;
+    return el;
+  }
+
+  themePopover.appendChild(makeLabel('Claro'));
+  lightKeys.forEach(k => themePopover.appendChild(makeOption(k)));
+  const divider = document.createElement('div');
+  divider.className = 'theme-divider';
+  themePopover.appendChild(divider);
+  themePopover.appendChild(makeLabel('Oscuro'));
+  darkKeys.forEach(k => themePopover.appendChild(makeOption(k)));
+})();
+
+// Set initial abbr text
+document.getElementById('theme-abbr').textContent = (THEMES[currentThemeKey] || THEMES.ducati916).abbr;
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+// waypoints[i] = { latlng: [lat, lng], marker }
+// segments[i]  = { coords: [[lng,lat],...], layer, distance } | null
+// invariant: segments.length === max(0, waypoints.length - 1)
+let waypoints       = [];
+let segments        = [];
+let riskLayers      = [];
+let weatherMarkers  = [];
+let riskVisible     = true;
+let weatherVisible  = true;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function formatDistance(meters) {
+  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+}
+
+function getRouteCoordinates() {
+  const all = [];
+  for (const seg of segments) {
+    if (!seg) continue;
+    if (all.length === 0) all.push(...seg.coords);
+    else all.push(...seg.coords.slice(1));
+  }
+  return all;
+}
+
+function updateBottomBar() {
+  const n    = waypoints.length;
+  const dist = segments.reduce((sum, s) => sum + (s?.distance ?? 0), 0);
+
+  if (n === 0) {
+    bottomBar.classList.remove('visible');
+    return;
+  }
+
+  bottomBar.classList.add('visible');
+  chipInfo.innerHTML = `<strong>${n}</strong> punto${n !== 1 ? 's' : ''}${dist > 0 ? ' · ' + formatDistance(dist) : ''}`;
+
+  if (getRouteCoordinates().length >= 2) {
+    btnAnalyze.classList.add('ready');
+  } else {
+    btnAnalyze.classList.remove('ready');
+  }
+}
+
+function makePointIcon() {
+  const color = cssVar('--accent-route');
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:12px;height:12px;background:${color};border:2px solid #fff;border-radius:50%;cursor:grab;animation:pointAppear 0.2s ease both;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
+async function fetchRoadSegment(from, to, signal) {
+  const url  = `${OSRM}/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?geometries=geojson&overview=full`;
+  const res  = await fetch(url, signal ? { signal } : undefined);
+  const data = await res.json();
+  if (data.code !== 'Ok' || !data.routes.length) return null;
+  return { geometry: data.routes[0].geometry, distance: data.routes[0].distance };
+}
+
+function buildSegment(result) {
+  if (!result) return null;
+  const color = cssVar('--accent-route');
+  const layer = L.geoJSON(result.geometry, {
+    style: { color, weight: 2, opacity: 0.85, dashArray: '6 4' },
+  }).addTo(map);
+  return { coords: result.geometry.coordinates, layer, distance: result.distance };
+}
+
+// ── Marker ─────────────────────────────────────────────────────────────────
+
+let isDragging = false;
+
+function createMarker(latlng) {
+  const marker = L.marker(latlng, {
+    icon: makePointIcon(),
+    draggable: true,
+    interactive: true,
+    autoPan: true,
+  }).addTo(map);
+
+  marker.on('contextmenu', async (e) => {
+    L.DomEvent.stopPropagation(e);
+    const i = waypoints.findIndex(w => w.marker === marker);
+    if (i !== -1) {
+      await deleteWaypoint(i);
+      if (resultsPanel.classList.contains('open')) analyzeRoute();
+    }
+  });
+
+  let dragTimer = null;
+  let dragController = null;
+
+  marker.on('dragstart', () => { isDragging = true; });
+
+  marker.on('drag', (e) => {
+    if (dragController) dragController.abort();
+    clearTimeout(dragTimer);
+
+    const ll = e.target.getLatLng();
+    const i  = waypoints.findIndex(w => w.marker === marker);
+    if (i === -1) return;
+
+    dragController = new AbortController();
+    const controller = dragController;
+    dragTimer = setTimeout(async () => {
+      await moveWaypoint(i, [ll.lat, ll.lng], controller.signal);
+    }, 80);
+  });
+
+  marker.on('dragend', async (e) => {
+    if (dragController) { dragController.abort(); dragController = null; }
+    clearTimeout(dragTimer);
+
+    const ll = e.target.getLatLng();
+    const i  = waypoints.findIndex(w => w.marker === marker);
+    if (i !== -1) await moveWaypoint(i, [ll.lat, ll.lng]);
+    setTimeout(() => { isDragging = false; }, 50);
+    if (resultsPanel.classList.contains('open')) analyzeRoute();
+  });
+
+  return marker;
+}
+
+// ── Waypoint operations ────────────────────────────────────────────────────
+
+async function addWaypoint(latlng) {
+  const marker = createMarker(latlng);
+  waypoints.push({ latlng, marker });
+
+  if (waypoints.length > 1) {
+    const prev   = waypoints[waypoints.length - 2].latlng;
+    const result = await fetchRoadSegment(prev, latlng);
+    segments.push(buildSegment(result));
+  }
+
+  updateBottomBar();
+}
+
+async function deleteWaypoint(i) {
+  map.removeLayer(waypoints[i].marker);
+
+  const hasPrev = i > 0;
+  const hasNext = i < waypoints.length - 1;
+
+  // Remove segment before: segments[i-1]
+  if (hasPrev) {
+    if (segments[i - 1]) map.removeLayer(segments[i - 1].layer);
+    segments.splice(i - 1, 1);
+  }
+
+  // After the splice above, old segments[i] shifted to i-1 (if hasPrev) or stays at i
+  const nextSegIdx = hasPrev ? i - 1 : i;
+  if (hasNext) {
+    if (segments[nextSegIdx]) map.removeLayer(segments[nextSegIdx].layer);
+    segments.splice(nextSegIdx, 1);
+  }
+
+  waypoints.splice(i, 1);
+
+  // Reconnect neighbors with a new segment
+  if (hasPrev && hasNext) {
+    const result = await fetchRoadSegment(waypoints[i - 1].latlng, waypoints[i].latlng);
+    segments.splice(i - 1, 0, buildSegment(result));
+  }
+
+  updateBottomBar();
+}
+
+async function moveWaypoint(i, newLatlng, signal) {
+  waypoints[i].latlng = newLatlng;
+
+  const hasPrev = i > 0;
+  const hasNext = i < waypoints.length - 1;
+
+  try {
+    // Fetch both adjacent segments in parallel
+    const [prevResult, nextResult] = await Promise.all([
+      hasPrev ? fetchRoadSegment(waypoints[i - 1].latlng, newLatlng, signal) : Promise.resolve(null),
+      hasNext ? fetchRoadSegment(newLatlng, waypoints[i + 1].latlng, signal) : Promise.resolve(null),
+    ]);
+
+    if (hasPrev) {
+      if (segments[i - 1]) map.removeLayer(segments[i - 1].layer);
+      segments[i - 1] = buildSegment(prevResult);
+    }
+
+    if (hasNext) {
+      if (segments[i]) map.removeLayer(segments[i].layer);
+      segments[i] = buildSegment(nextResult);
+    }
+
+    updateBottomBar();
+  } catch (err) {
+    if (err.name !== 'AbortError') throw err;
+    // Aborted by a newer drag update — ignore
+  }
+}
+
+// ── Map click ──────────────────────────────────────────────────────────────
+
+map.on('click', async (e) => {
+  if (isDragging) return;
+  const { lat, lng } = e.latlng;
+  await addWaypoint([lat, lng]);
+  if (resultsPanel.classList.contains('open')) analyzeRoute();
+});
+
+// ── Analyze ────────────────────────────────────────────────────────────────
+
+async function analyzeRoute() {
+  btnAnalyze.disabled = true;
+  btnAnalyze.innerHTML = '<div class="spin-sm"></div> Analizando…';
+  clearResults();
+
+  const body = JSON.stringify({ coordinates: getRouteCoordinates() });
+  const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body };
+
+  try {
+    const checkOk = async r => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${await r.text()}`);
+      return r.json();
+    };
+    const [segs, weatherPts] = await Promise.all([
+      fetch(`${API}/route/segments`, opts).then(checkOk),
+      fetch(`${API}/route/weather`,  opts).then(checkOk),
+    ]);
+
+    renderRiskResults(segs);
+    renderWeatherResults(weatherPts);
+    resultsPanel.classList.add('open');
+    document.body.classList.add('panel-open');
+  } catch (err) {
+    console.error(err);
+  }
+
+  btnAnalyze.disabled = false;
+  btnAnalyze.innerHTML = 'Analizar ruta';
+}
+
+btnAnalyze.addEventListener('click', analyzeRoute);
+
+// ── Render results ─────────────────────────────────────────────────────────
+
+function renderRiskResults(segs) {
+  riskList.innerHTML = '';
+
+  const riskChevron = document.querySelector('#hdr-risk .chevron');
+  if (!segs || segs.length === 0) {
+    riskSubtitle.textContent = 'Ningún tramo en esta ruta';
+    riskChevron.style.display = 'none';
+    btnToggleRisk.style.display = 'none';
+    return;
+  }
+  riskChevron.style.display = '';
+  btnToggleRisk.style.display = '';
+
+  const totalRisk = segs.reduce((sum, s) => sum + s.length_m, 0);
+  riskSubtitle.textContent = `${segs.length} tramo${segs.length !== 1 ? 's' : ''} · ${formatDistance(totalRisk)}`;
+
+function classifyRoad(road) {
+  if (/^AP-/i.test(road)) return 'autopista';
+
+  // A- con 1-2 dígitos → autovía estatal (A-1, A-3, A-66)
+  // A- con 3+ dígitos → autonómica (A-308, A-3075)
+  if (/^A-\d{1,2}$/i.test(road)) return 'autovia';
+
+  if (/^N-/i.test(road)) return 'nacional';
+
+  // Prefijos autonómicos conocidos de una sola letra
+  // M- Madrid, B- Barcelona, C- Cataluña, R- radiales
+  // Se excluyen A- y N- ya tratados arriba
+  if (/^[A-Z]-/i.test(road)) return 'autonomica';
+
+  // Prefijos de dos letras: GC-, TF-, CV-, BI-, SS-, VI-, etc.
+  if (/^[A-Z]{2}-/i.test(road)) return 'autonomica';
+
+  return 'local';
+}
+  const ROAD_STYLES = {
+    autopista:  { bg: '#0047AB', text: '#ffffff' },
+    autovia:    { bg: '#0047AB', text: '#ffffff' },
+    nacional:   { bg: '#C0392B', text: '#ffffff' },
+    autonomica: { bg: '#ff9900', text: '#000000' },
+    local:      { bg: '#4a4a4a', text: '#ffffff' },
+  };
+
+  function darken(hex, factor) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const toHex = v => Math.round(v * factor).toString(16).padStart(2, '0');
+    return '#' + toHex(r) + toHex(g) + toHex(b);
+  }
+
+  function roadBadge(road) {
+    const type   = classifyRoad(road);
+    const style  = ROAD_STYLES[type];
+    const bgDark = darken(style.bg, 0.7);
+    const base   = 'display:inline-flex;align-items:center;gap:0;border-radius:3px;overflow:hidden;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:0.02em;margin-bottom:4px;';
+    const main   = '<span style="background:' + style.bg + ';color:' + style.text + ';padding:2px 8px;">' + road + '</span>';
+    return '<div style="' + base + '">' + main + '</div>';
+  }
+
+  segs.forEach((seg, i) => {
+    const card = document.createElement('div');
+    card.className = 'segment-card';
+    card.style.animationDelay = i * 40 + 'ms';
+    card.innerHTML = '<div class="seg-dot"><svg width="12" height="12" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="seg-body">'
+      + roadBadge(seg.road)
+      + '<div class="seg-province">' + seg.province + '</div>'
+      + '<div class="seg-meta">PK <span>' + (seg.pk_start / 1000).toFixed(1) + '</span>–<span>' + (seg.pk_end / 1000).toFixed(1) + '</span> km &nbsp;·&nbsp; <span>' + (seg.length_m / 1000).toFixed(2) + ' km</span><br>'
+      + (seg.direction === 'bothWays' ? 'Ambos sentidos' : seg.direction)
+      + '</div></div>';
+
+    const riskColor = cssVar('--accent-risk');
+    const layer = L.geoJSON(seg.geojson, {
+      style: { color: riskColor, weight: 4, opacity: 0.9 },
+      onEachFeature: (_, l) => {
+        l.bindTooltip(
+          roadBadge(seg.road)
+          + '<div class="seg-province">' + seg.province + '</div>'
+          + '<div class="seg-meta">PK <span>' + (seg.pk_start / 1000).toFixed(1) + '</span>–<span>' + (seg.pk_end / 1000).toFixed(1) + '</span> km &nbsp;·&nbsp; <span>' + (seg.length_m / 1000).toFixed(2) + ' km</span><br>'
+          + (seg.direction === 'bothWays' ? 'Ambos sentidos' : seg.direction) + '</div>',
+          { sticky: true }
+        );
+        l.on('mouseover', () => l.setStyle({ weight: 6, opacity: 1 }));
+        l.on('mouseout',  () => l.setStyle({ weight: 4, opacity: 0.9 }));
+      },
+    }).addTo(map);
+
+    setTimeout(() => {
+      layer.eachLayer(l => {
+        const el = l.getElement();
+        if (el) el.classList.add('risk-path');
+      });
+    }, 100);
+
+    riskLayers.push(layer);
+
+    card.addEventListener('click', () => {
+      map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+    });
+
+    riskList.appendChild(card);
+  });
+}
+
+function renderWeatherResults(pts) {
+  weatherList.innerHTML = '';
+
+  if (!pts || pts.length === 0) {
+    weatherSubtitle.textContent = 'Sin datos meteorológicos';
+    return;
+  }
+
+  weatherSubtitle.textContent = `${pts.length} punto${pts.length !== 1 ? 's' : ''}`;
+
+  const routeColor = cssVar('--accent-route');
+  pts.forEach((pt, i) => {
+    const card = document.createElement('div');
+    card.className = 'weather-card';
+    card.style.animationDelay = `${i * 40}ms`;
+
+    const windDeg  = pt.wind_direction_deg ?? 0;
+    const windSpd  = (pt.wind_speed_kmh ?? 0).toFixed(1);
+    const prec     = (pt.precipitation_mm ?? 0).toFixed(1);
+    const vis      = (pt.visibility_km ?? 0).toFixed(1);
+
+    const svgArrow = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="transform:rotate(' + windDeg + 'deg);flex-shrink:0"><line x1="7" y1="11" x2="7" y2="3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M4 6l3-3 3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const svgRain  = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1L10.5 8a4 4 0 11-7 0L7 1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+    const svgVis = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="1" y1="4" x2="13" y2="4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="2" y1="7" x2="11" y2="7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="3" y1="10" x2="10" y2="10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>'
+
+    const routeKm  = (pt.route_km ?? 0).toFixed(1);
+    const riskColor = cssVar('--accent-risk');
+    const alertDot  = pt.alert ? '<div class="seg-dot" style="margin-top:0;margin-right:4px;display:inline-flex;"><svg width="12" height="12" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div>' : '';
+    const wColor    = pt.wind_speed_kmh   > 50  ? 'color:' + riskColor : '';
+    const pColor    = pt.precipitation_mm > 0.5 ? 'color:' + riskColor : '';
+    const vColor    = pt.visibility_km    < 1.0 ? 'color:' + riskColor : '';
+
+    card.innerHTML = '<div class="weather-loc" style="display:flex;align-items:center;">' + alertDot + 'km ' + routeKm + '</div>'
+      + '<div class="weather-row">' + svgArrow + '<span style="' + wColor + '">' + windSpd + '</span> km/h</div>'
+      + '<div class="weather-row">' + svgRain  + '<span style="' + pColor + '">' + prec    + '</span> mm</div>'
+      + '<div class="weather-row">' + svgVis   + '<span style="' + vColor + '">' + vis     + '</span> km</div>';
+
+    const markerColor = pt.alert ? riskColor : routeColor;
+    const marker = L.circleMarker([pt.lat, pt.lon], {
+      radius: 4,
+      alert: pt.alert,
+      color: markerColor,
+      fillColor: markerColor,
+      fillOpacity: 0.9,
+      weight: 1.5,
+    }).addTo(map);
+
+    marker.bindTooltip(
+      '<div class="weather-loc">km ' + routeKm + '</div>'
+      + '<div class="weather-row">' + svgArrow + '<span>' + windSpd + '</span> km/h</div>'
+      + '<div class="weather-row">' + svgRain  + '<span>' + prec   + '</span> mm</div>'
+      + '<div class="weather-row">' + svgVis   + '<span>' + vis    + '</span> km</div>',
+      { sticky: true }
+    );
+
+    weatherMarkers.push(marker);
+
+    card.addEventListener('click', () => {
+      map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 11));
+    });
+
+    weatherList.appendChild(card);
+  });
+}
+
+function clearResults() {
+  riskLayers.forEach(l => map.removeLayer(l));
+  riskLayers = [];
+  riskList.innerHTML = '';
+  riskSubtitle.textContent = '';
+
+  weatherMarkers.forEach(m => map.removeLayer(m));
+  weatherMarkers = [];
+  weatherList.innerHTML = '';
+  weatherSubtitle.textContent = '';
+
+  riskVisible    = true;
+  weatherVisible = true;
+  btnToggleRisk.classList.add('active');
+  btnToggleRisk.innerHTML = EYE_OPEN;
+  btnToggleWeather.classList.add('active');
+  btnToggleWeather.innerHTML = EYE_OPEN;
+  document.getElementById('section-risk').classList.remove('collapsed');
+  document.getElementById('section-weather').classList.remove('collapsed');
+}
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+
+function clearAll() {
+  waypoints.forEach(w => map.removeLayer(w.marker));
+  segments.forEach(s => { if (s) map.removeLayer(s.layer); });
+  waypoints = [];
+  segments  = [];
+  clearResults();
+  resultsPanel.classList.remove('open');
+  document.body.classList.remove('panel-open');
+  bottomBar.classList.remove('visible');
+  btnAnalyze.classList.remove('ready');
+}
+
+const EYE_OPEN = `<svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+  <path d="M1 5C1 5 3 1 7 1C11 1 13 5 13 5C13 5 11 9 7 9C3 9 1 5 1 5Z" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="7" cy="5" r="1.8" stroke="currentColor" stroke-width="1.2"/>
+</svg>`;
+
+const EYE_CLOSED = `<svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+  <path d="M1 5C1 5 3 1 7 1C11 1 13 5 13 5C13 5 11 9 7 9C3 9 1 5 1 5Z" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="7" cy="5" r="1.8" stroke="currentColor" stroke-width="1.2"/>
+  <line x1="1.5" y1="0.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+</svg>`;
+
+// Initialize eye icons
+btnToggleRisk.innerHTML    = EYE_OPEN;
+btnToggleWeather.innerHTML = EYE_OPEN;
+
+btnClear.addEventListener('click', clearAll);
+btnClosePanel.addEventListener('click', () => {
+  resultsPanel.classList.remove('open');
+  document.body.classList.remove('panel-open');
+});
+
+document.getElementById('hdr-risk').addEventListener('click', () => {
+  if (riskList.children.length === 0) return;
+  document.getElementById('section-risk').classList.toggle('collapsed');
+});
+
+document.getElementById('hdr-weather').addEventListener('click', () => {
+  document.getElementById('section-weather').classList.toggle('collapsed');
+});
+
+btnToggleRisk.addEventListener('click', (e) => {
+  e.stopPropagation();
+  riskVisible = !riskVisible;
+  btnToggleRisk.classList.toggle('active', riskVisible);
+  btnToggleRisk.innerHTML = riskVisible ? EYE_OPEN : EYE_CLOSED;
+  riskLayers.forEach(l => riskVisible ? l.addTo(map) : map.removeLayer(l));
+});
+
+btnToggleWeather.addEventListener('click', (e) => {
+  e.stopPropagation();
+  weatherVisible = !weatherVisible;
+  btnToggleWeather.classList.toggle('active', weatherVisible);
+  btnToggleWeather.innerHTML = weatherVisible ? EYE_OPEN : EYE_CLOSED;
+  weatherMarkers.forEach(m => weatherVisible ? m.addTo(map) : map.removeLayer(m));
+});
+
+btnTheme.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const rect = btnTheme.getBoundingClientRect();
+  themePopover.style.top  = rect.top + 'px';
+  themePopover.style.left = (rect.right + 10) + 'px';
+  themePopover.classList.toggle('open');
+});
+themePopover.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => themePopover.classList.remove('open'));
+</script>
+</body>
+</html>

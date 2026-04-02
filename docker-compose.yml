@@ -1,0 +1,22 @@
+services:
+  db:
+    image: imresamu/postgis:17-3.5-bookworm
+    environment:
+      POSTGRES_DB: motorisk
+      POSTGRES_USER: motorisk
+      POSTGRES_PASSWORD: motorisk
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend
+    command: osrm-routed --algorithm mld /data/spain-with-canary-islands.osrm
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
+
+volumes:
+  pgdata:
