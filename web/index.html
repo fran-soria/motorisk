@@ -290,6 +290,39 @@
 
     #results-panel.open { transform: translateX(0); }
 
+    /* ── Settings panel ── */
+    #settings-clip {
+      position: fixed;
+      bottom: 60px;
+      left: 0; right: 0; top: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    #settings-panel {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 12px 12px 0px 0px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 280px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transform: translateX(-50%) translateY(calc(100% + 8px));
+      transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #settings-panel.open {
+      transform: translateX(-50%) translateY(-8px);
+      pointer-events: auto;
+    }
+
     #panel-header {
       padding: 20px 16px 14px;
       border-bottom: 0.5px solid var(--border);
@@ -400,7 +433,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 16px 6px;
+      padding: 10px 16px;
       flex-shrink: 0;
     }
 
@@ -430,6 +463,22 @@
     .section-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
     .section-divider { height: 0.5px; background: var(--border); flex-shrink: 0; }
+
+    /* ── Chip ── */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      color: var(--text);
+      font-size: 11px;
+      font-family: var(--sans);
+      transition: background 0.15s;
+      user-select: none;
+      border: 0.5px solid var(--border);
+    }
+    .chip:hover { background: var(--border); }
 
     .section-info {
       flex: 1;
@@ -551,8 +600,26 @@
 </div>
 <div id="theme-popover" class="float"></div>
 
+<!-- Settings panel -->
+<div id="settings-clip">
+  <div id="settings-panel">
+    <div id="day-buttons" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    <div id="hour-row" style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:11px;color:var(--muted);font-family:var(--mono);min-width:36px;" id="hour-label">08:00</span>
+      <input type="range" id="hour-slider" min="0" max="23" value="0" style="flex:1;accent-color:var(--accent-route);" oninput="onHourChange(this.value)">
+    </div>
+  </div>
+</div>
+
 <!-- Bottom bar -->
 <div id="bottom-bar" class="float">
+  <div id="btn-settings" class="chip" style="cursor:pointer;" onclick="toggleSettings()">
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M3.05 3.05l1.06 1.06M9.9 9.9l1.05 1.05M9.9 3.05l-1.05 1.06M3.05 9.9l1.06-1.05" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    <span id="settings-label" style="font-size:11px;">Ahora</span>
+  </div>
   <div id="chip-info"></div>
   <button id="btn-analyze">Analizar ruta</button>
   <button id="btn-clear" aria-label="Limpiar ruta">
@@ -726,6 +793,7 @@ function applyThemeCSSVars(theme) {
   root.style.setProperty('--border',       theme.border);
   root.style.setProperty('--accent-risk',  theme.risk);
   root.style.setProperty('--accent-route', theme.route);
+  root.dataset.themeMode = theme.mode;
 }
 
 // Apply initial theme vars before map init to avoid flash
@@ -757,6 +825,7 @@ function applyTheme(key) {
     el.classList.toggle('active', el.dataset.key === key);
   });
   localStorage.setItem('moto-risk-theme', key);
+  highlightSelectedDay();
 }
 
 // ── DOM ────────────────────────────────────────────────────────────────────
@@ -819,6 +888,11 @@ const btnToggleWeather = document.getElementById('btn-toggle-weather');
 // Set initial abbr text
 document.getElementById('theme-abbr').textContent = (THEMES[currentThemeKey] || THEMES.ducati916).abbr;
 
+// Init hour slider to current hour
+const _initHour = new Date().getHours();
+document.getElementById('hour-slider').value = _initHour;
+document.getElementById('hour-label').textContent = String(_initHour).padStart(2, '0') + ':00';
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 // waypoints[i] = { latlng: [lat, lng], marker }
@@ -830,8 +904,206 @@ let riskLayers      = [];
 let weatherMarkers  = [];
 let riskVisible     = true;
 let weatherVisible  = true;
+let selectedDate = new Date();
+let selectedHour = new Date().getHours();
+let isNow        = true;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function sampleCoords(coords) {
+  if (coords.length < 2) return coords;
+  let total = 0;
+  for (let i = 1; i < coords.length; i++)
+    total += haversineKm(coords[i-1][1], coords[i-1][0], coords[i][1], coords[i][0]);
+  let n = Math.floor(total / 50) + 1;
+  if (n < 2) n = 2;
+  if (n > 10) n = 10;
+  const result = [coords[0]];
+  const interval = total / (n - 1);
+  let accumulated = 0, nextTarget = interval;
+  for (let i = 1; i < coords.length; i++) {
+    const d = haversineKm(coords[i-1][1], coords[i-1][0], coords[i][1], coords[i][0]);
+    accumulated += d;
+    while (accumulated >= nextTarget - 1e-9 && result.length < n - 1) {
+      result.push(coords[i]);
+      nextTarget += interval;
+    }
+  }
+  if (result[result.length - 1] !== coords[coords.length - 1])
+    result.push(coords[coords.length - 1]);
+  return result;
+}
+
+async function fetchWeatherHourly(coords) {
+  const pts  = sampleCoords(coords);
+  const lats = pts.map(p => p[1]).join(',');
+  const lons = pts.map(p => p[0]).join(',');
+  const vars = 'windspeed_10m,winddirection_10m,precipitation,visibility';
+
+  const routeKms = [0];
+  for (let i = 1; i < pts.length; i++)
+    routeKms.push(routeKms[i-1] + haversineKm(pts[i-1][1], pts[i-1][0], pts[i][1], pts[i][0]));
+
+  let url, utcHour;
+
+  if (isNow) {
+    url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=${vars}&wind_speed_unit=kmh`;
+  } else {
+    const yyyy = selectedDate.getFullYear();
+    const mm   = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const dd   = String(selectedDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const utcOffset = -new Date().getTimezoneOffset() / 60;
+    utcHour = (selectedHour - utcOffset + 24) % 24;
+    url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=${vars}&wind_speed_unit=kmh&start_date=${dateStr}&end_date=${dateStr}`;
+  }
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Open-Meteo ${resp.status}`);
+  const data = await resp.json();
+  const locations = Array.isArray(data) ? data : [data];
+
+  return locations.map((loc, i) => {
+    let windSpd, windDir, prec, vis;
+    if (isNow) {
+      windSpd = loc.current.windspeed_10m     ?? 0;
+      windDir = loc.current.winddirection_10m ?? 0;
+      prec    = loc.current.precipitation     ?? 0;
+      vis     = (loc.current.visibility       ?? 0) / 1000;
+    } else {
+      windSpd = loc.hourly.windspeed_10m[utcHour]     ?? 0;
+      windDir = loc.hourly.winddirection_10m[utcHour] ?? 0;
+      prec    = loc.hourly.precipitation[utcHour]     ?? 0;
+      vis     = (loc.hourly.visibility[utcHour]       ?? 0) / 1000;
+    }
+    const km = Math.round(routeKms[i] * 10) / 10;
+    return {
+      route_km: km, lat: pts[i][1], lon: pts[i][0],
+      wind_speed_kmh: windSpd, wind_direction_deg: windDir,
+      precipitation_mm: prec, visibility_km: vis,
+      alert: windSpd > 50 || prec > 0.5 || vis < 1.0,
+    };
+  });
+}
+
+// ── Settings panel ─────────────────────────────────────────────────────────
+
+const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function toggleSettings() {
+  const panel   = document.getElementById('settings-panel');
+  const visible = panel.classList.contains('open');
+  panel.classList.toggle('open', !visible);
+  if (!visible) buildDayButtons();
+}
+
+function buildDayButtons() {
+  const container = document.getElementById('day-buttons');
+  container.innerHTML = '';
+  const codes = ['D','L','M','X','J','V','S'];
+  const now = new Date();
+
+  for (let i = 0; i <= 6; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+    const btn = document.createElement('div');
+    btn.className = 'chip';
+    btn.style.cssText = 'cursor:pointer;font-size:11px;min-width:28px;justify-content:center;';
+    btn.textContent = i === 0 ? 'Hoy' : codes[d.getDay()];
+    btn.dataset.index = i;
+    btn.onclick = () => selectDay(d, btn, i);
+    container.appendChild(btn);
+  }
+
+  highlightSelectedDay();
+  updateHourSliderMin();
+}
+
+function selectDay(date, btn, index) {
+  selectedDate = date;
+  if (index !== 0) isNow = false;
+  highlightSelectedDay();
+  updateHourSliderMin();
+  updateSettingsLabel();
+  if (resultsPanel.classList.contains('open')) analyzeRoute();
+}
+
+function updateHourSliderMin() {
+  const slider = document.getElementById('hour-slider');
+  const now = new Date();
+  const selectedMidnight = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+  const todayMidnight    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const isToday = selectedMidnight.getTime() === todayMidnight.getTime();
+  const minHour = isToday ? now.getHours() : 0;
+  slider.min = minHour;
+  if (selectedHour < minHour) {
+    selectedHour = minHour;
+    slider.value = minHour;
+    document.getElementById('hour-label').textContent = String(minHour).padStart(2, '0') + ':00';
+  }
+}
+
+function highlightSelectedDay() {
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const selectedMidnight = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+  document.querySelectorAll('#day-buttons .chip').forEach(b => {
+    const diffDays = Math.round((selectedMidnight - todayMidnight) / 86400000);
+    const isSelected = parseInt(b.dataset.index) === diffDays;
+    if (isSelected) {
+      b.style.borderColor = 'var(--accent-route)';
+      b.style.color       = 'var(--bg)';
+      b.style.background  = 'var(--accent-route)';
+    } else {
+      b.style.borderColor = '';
+      b.style.color       = '';
+      b.style.background  = '';
+    }
+  });
+}
+
+let _hourDebounce = null;
+function onHourChange(value) {
+  selectedHour = parseInt(value);
+  document.getElementById('hour-label').textContent =
+    String(selectedHour).padStart(2, '0') + ':00';
+  isNow = false;
+  updateSettingsLabel();
+  if (resultsPanel.classList.contains('open')) {
+    clearTimeout(_hourDebounce);
+    _hourDebounce = setTimeout(analyzeRoute, 600);
+  }
+}
+
+function updateSettingsLabel() {
+  const label = document.getElementById('settings-label');
+  if (isNow) { label.textContent = 'Ahora'; return; }
+  const codes = ['D','L','M','X','J','V','S'];
+  const now = new Date();
+  const diffDays = Math.round((selectedDate - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  const dayLabel = diffDays === 0 ? 'Hoy' : codes[selectedDate.getDay()];
+  label.textContent = `${dayLabel} ${String(selectedHour).padStart(2, '0')}:00`;
+}
+
+// Close settings panel on outside click.
+// Use composedPath() instead of contains() so that clicks on chips that
+// mutate the DOM (e.g. "Otro" calling innerHTML='') don't falsely trigger
+// a close — the path is captured at dispatch time, before any DOM changes.
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('settings-panel');
+  const btn   = document.getElementById('btn-settings');
+  const path  = e.composedPath();
+  if (panel && !path.includes(panel) && !path.includes(btn))
+    panel.classList.remove('open');
+});
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -1051,9 +1323,13 @@ async function analyzeRoute() {
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${await r.text()}`);
       return r.json();
     };
+    const weatherFetch = isNow
+      ? fetch(`${API}/route/weather`, opts).then(checkOk)
+      : fetchWeatherHourly(getRouteCoordinates());
+
     const [segs, weatherPts] = await Promise.all([
       fetch(`${API}/route/segments`, opts).then(checkOk),
-      fetch(`${API}/route/weather`,  opts).then(checkOk),
+      weatherFetch,
     ]);
 
     renderRiskResults(segs);
@@ -1274,6 +1550,14 @@ function clearAll() {
   document.body.classList.remove('panel-open');
   bottomBar.classList.remove('visible');
   btnAnalyze.classList.remove('ready');
+  selectedDate = new Date();
+  selectedHour = new Date().getHours();
+  isNow        = true;
+  document.getElementById('settings-label').textContent = 'Ahora';
+  document.getElementById('hour-slider').value = selectedHour;
+  document.getElementById('hour-label').textContent =
+    String(selectedHour).padStart(2, '0') + ':00';
+  document.getElementById('settings-panel').classList.remove('open');
 }
 
 const EYE_OPEN = `<svg width="14" height="10" viewBox="0 0 14 10" fill="none">

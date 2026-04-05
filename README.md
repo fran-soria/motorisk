@@ -1,0 +1,195 @@
+# motorisk*
+
+Route analysis tool for motorcyclists in Spain. Draw a route on the map and get an overlay of DGT high-risk segments, real road geometry via OSRM, and weather conditions from Open-Meteo.
+
+![motorisk — tramos de riesgo](screenshots/tramos-riesgo.png)
+![motorisk — condiciones meteorológicas](screenshots/condiciones-meteo.png)
+
+## What it does
+
+**Risk segments** ingest DGT's official DATEX2 feed of high-risk motorcycle segments and store them in PostGIS. When you submit a route, a spatial intersection query (`ST_Intersects`) returns every flagged segment your route crosses, with road badge, province, and kilometrage.
+
+**Real road geometry** snaps routes to actual roads via a self-hosted OSRM instance built from OpenStreetMap data covering mainland Spain and the Canary Islands, merged into a single routing graph. No straight lines between clicks.
+
+**Weather** samples the route at 50 km intervals and queries Open-Meteo for wind speed, precipitation, and visibility at each point. Supports forecast lookup up to 7 days ahead with per-hour resolution.
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| API | Go (`net/http`, no framework) |
+| Spatial queries | PostgreSQL 17 + PostGIS 3.5 |
+| Routing | OSRM (self-hosted, MLD algorithm) |
+| Road data | OpenStreetMap via Geofabrik |
+| Risk data | DGT — Punto de Acceso Nacional (DATEX2) |
+| Weather | Open-Meteo |
+| Frontend | HTML + Leaflet.js (single file, no bundler) |
+| Infrastructure | Docker Compose + Colima |
+
+## Architecture
+
+```
+POST /route/segments   →  ST_Intersects(route, risk_segments) on PostGIS
+POST /route/weather    →  Open-Meteo hourly/current forecast per sampled point
+GET  /health           →  liveness check
+```
+
+The frontend calls all endpoints in parallel via `Promise.all` after the user draws a route. OSRM road-snapping happens client-side before the API calls, so the intersection query uses actual road geometry rather than straight lines between clicks.
+
+## Spatial query
+
+The core query. With a GiST index on `geom`, this runs in milliseconds across the full national dataset:
+
+```sql
+SELECT id, road, province, direction, length_m, pk_start, pk_end,
+       ST_AsGeoJSON(geom)
+FROM risk_segments
+WHERE ST_Intersects(
+    geom,
+    ST_SetSRID(ST_GeomFromText($1), 4326)
+);
+```
+
+## Running locally
+
+### Prerequisites
+
+- [Colima](https://github.com/abiosoft/colima) or Docker Desktop
+- Go 1.22+
+- [osmium-tool](https://osmcode.org/osmium-tool/) (`brew install osmium-tool`)
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/fran-soria/motorisk.git
+cd motorisk
+cp .env.example .env
+# edit .env with your values
+```
+
+### 2. Start the database
+
+```bash
+docker compose up -d db
+```
+
+### 3. Set up OSRM
+
+Download Spain and Canary Islands OSM data, merge them, then preprocess. The extract step requires ~14 GB of RAM and takes around 10-20 minutes.
+
+```bash
+mkdir -p osrm-data
+
+curl -L -o osrm-data/spain-latest.osm.pbf \
+  https://download.geofabrik.de/europe/spain-latest.osm.pbf
+
+curl -L -o osrm-data/canary-islands-latest.osm.pbf \
+  https://download.geofabrik.de/africa/canary-islands-latest.osm.pbf
+
+osmium merge \
+  osrm-data/spain-latest.osm.pbf \
+  osrm-data/canary-islands-latest.osm.pbf \
+  -o osrm-data/spain-full.osm.pbf
+
+docker run --rm -v "$(pwd)/osrm-data:/data" ghcr.io/project-osrm/osrm-backend \
+  osrm-extract -p /opt/car.lua /data/spain-full.osm.pbf
+
+docker run --rm -v "$(pwd)/osrm-data:/data" ghcr.io/project-osrm/osrm-backend \
+  osrm-partition /data/spain-full.osrm
+
+docker run --rm -v "$(pwd)/osrm-data:/data" ghcr.io/project-osrm/osrm-backend \
+  osrm-customize /data/spain-full.osrm
+```
+
+### 4. Start all services
+
+```bash
+docker compose up -d
+```
+
+### 5. Ingest DGT data
+
+```bash
+go run cmd/ingest/main.go
+```
+
+Fetches the current DATEX2 feed from DGT, does map matching via OSRM for each segment, and loads everything into PostGIS.
+
+### 6. Start the API
+
+```bash
+go run cmd/server/main.go
+```
+
+### 7. Open the frontend
+
+```bash
+open web/index.html
+```
+
+## Environment variables
+
+See `.env.example`:
+
+| Variable | Description | Example |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://motorisk:motorisk@localhost:5432/motorisk` |
+| `OSRM_URL` | OSRM server base URL | `http://192.168.64.2:5000` |
+| `PORT` | API port | `8080` |
+
+With Colima, the VM is typically accessible at `192.168.64.2` rather than `localhost`. Run `colima ls` to confirm.
+
+## Data sources
+
+- **DGT risk segments**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas), DATEX2, updated on occurrence
+- **Road network**: [Geofabrik Spain](https://download.geofabrik.de/europe/spain.html) + [Canary Islands](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
+- **Weather**: [Open-Meteo](https://open-meteo.com), free for non-commercial use
+
+## Themes
+
+Six colour themes based on iconic motorcycles, each referencing original factory paint:
+
+| Theme | Reference | Mode |
+|---|---|---|
+| Ducati 916 | Rosso Corsa PPG 473.101 · 1994 | Dark |
+| Laverda 750 SF | RAL 2008 · 1969 | Dark |
+| Kawasaki H2R | Candy Lime Green 777 · 2015 | Dark |
+| Suzuki GSX-R750 | Navy blue · 1986 | Light |
+| Honda CB750 | Candy Ruby Red R4C · 1969 | Light |
+| BMW M1000RR | M Motorsport · 2021 | Light |
+
+## Limitations
+
+- DGT data covers the national road network only (excludes Catalonia and the Basque Country for most datasets).
+- OSRM map matching uses the `car` profile, appropriate for motorcycles on paved roads.
+- Weather sampling is at 50 km intervals; conditions between points are not interpolated.
+
+## License
+
+MIT
+
+*Data: DGT · Open-Meteo · OpenStreetMap contributors*
+
+---
+
+# motorisk*
+
+Herramienta de análisis de rutas para motoristas en España. Traza una ruta en el mapa y obtén los tramos de alto riesgo de la DGT, la geometría real de la carretera vía OSRM y las condiciones meteorológicas de Open-Meteo.
+
+## Qué hace
+
+**Tramos de riesgo:** ingesta el feed DATEX2 oficial de la DGT de tramos de elevado riesgo para motocicletas y los almacena en PostGIS. Al enviar una ruta, una query de intersección espacial devuelve cada tramo señalizado que cruza tu ruta.
+
+**Geometría real de carretera:** las rutas se ajustan a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium.
+
+**Meteorología:** muestrea la ruta cada 50 km y consulta Open-Meteo para obtener velocidad del viento, precipitación y visibilidad. Permite consultar el forecast hasta 7 días vista con resolución horaria.
+
+## Ejecutar en local
+
+Ver la versión en inglés para instrucciones completas. Variables de entorno en `.env.example`.
+
+## Fuentes de datos
+
+- **Tramos de riesgo DGT**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas): DATEX2
+- **Red viaria**: [Geofabrik España](https://download.geofabrik.de/europe/spain.html) + [Canarias](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
+- **Meteorología**: [Open-Meteo](https://open-meteo.com)
