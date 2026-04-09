@@ -37,6 +37,12 @@ type openMeteoLocation struct {
 		Precipitation    float64 `json:"precipitation"`
 		Visibility       float64 `json:"visibility"`
 	} `json:"current"`
+	Hourly struct {
+		WindSpeed10m     []float64 `json:"windspeed_10m"`
+		WindDirection10m []float64 `json:"winddirection_10m"`
+		Precipitation    []float64 `json:"precipitation"`
+		Visibility       []float64 `json:"visibility"`
+	} `json:"hourly"`
 }
 
 // haversineKm returns the great-circle distance in km between two lat/lon points.
@@ -94,6 +100,8 @@ func sampleCoords(coords [][2]float64) [][2]float64 {
 func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Coordinates [][2]float64 `json:"coordinates"`
+		Date        string       `json:"date,omitempty"`
+		Hour        int          `json:"hour,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "body inválido", http.StatusBadRequest)
@@ -112,22 +120,48 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 		lats[i] = fmt.Sprintf("%f", pt[1]) // lat
 		lons[i] = fmt.Sprintf("%f", pt[0]) // lon
 	}
-	url := fmt.Sprintf(
-		"https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=windspeed_10m,winddirection_10m,precipitation,visibility&wind_speed_unit=kmh",
-		strings.Join(lats, ","),
-		strings.Join(lons, ","),
-	)
+	var url string
+	if body.Date != "" {
+		url = fmt.Sprintf(
+			"https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&hourly=windspeed_10m,winddirection_10m,precipitation,visibility&wind_speed_unit=kmh&start_date=%s&end_date=%s",
+			strings.Join(lats, ","), strings.Join(lons, ","),
+			body.Date, body.Date,
+		)
+	} else {
+		url = fmt.Sprintf(
+			"https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=windspeed_10m,winddirection_10m,precipitation,visibility&wind_speed_unit=kmh",
+			strings.Join(lats, ","), strings.Join(lons, ","),
+		)
+	}
 
-	resp, err := http.Get(url) //nolint:noctx
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
+		http.Error(w, "error interno", http.StatusInternalServerError)
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		http.Error(w, "error consultando Open-Meteo", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("Open-Meteo devolvió %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+
 	var locations []openMeteoLocation
 	if err := json.NewDecoder(resp.Body).Decode(&locations); err != nil {
 		http.Error(w, "error procesando respuesta meteorológica", http.StatusBadGateway)
+		return
+	}
+
+	if len(locations) != len(pts) {
+		http.Error(w, "respuesta meteorológica incompleta", http.StatusBadGateway)
 		return
 	}
 
@@ -142,14 +176,26 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	result := make([]weatherPoint, len(locations))
 	for i, loc := range locations {
 		km := math.Round(routeKms[i]*10) / 10
+		var windSpd, windDir, prec, vis float64
+		if body.Date != "" {
+			windSpd = loc.Hourly.WindSpeed10m[body.Hour]
+			windDir = loc.Hourly.WindDirection10m[body.Hour]
+			prec    = loc.Hourly.Precipitation[body.Hour]
+			vis     = loc.Hourly.Visibility[body.Hour] / 1000
+		} else {
+			windSpd = loc.Current.WindSpeed10m
+			windDir = loc.Current.WindDirection10m
+			prec    = loc.Current.Precipitation
+			vis     = loc.Current.Visibility / 1000
+		}
 		pt := weatherPoint{
 			RouteKm:          km,
 			Lat:              pts[i][1],
 			Lon:              pts[i][0],
-			WindSpeedKmh:     loc.Current.WindSpeed10m,
-			WindDirectionDeg: loc.Current.WindDirection10m,
-			PrecipitationMm:  loc.Current.Precipitation,
-			VisibilityKm:     loc.Current.Visibility / 1000,
+			WindSpeedKmh:     windSpd,
+			WindDirectionDeg: windDir,
+			PrecipitationMm:  prec,
+			VisibilityKm:     vis,
 		}
 		pt.Alert = pt.WindSpeedKmh > 50 || pt.PrecipitationMm > 0.5 || pt.VisibilityKm < 1.0
 		result[i] = pt
@@ -212,8 +258,16 @@ func (s *Server) handleElevation(w http.ResponseWriter, r *http.Request) {
 		strings.Join(lons, ","),
 	)
 
-	resp, err := http.Get(url) //nolint:noctx
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
+		http.Error(w, "error interno", http.StatusInternalServerError)
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		http.Error(w, "error consultando Open-Meteo elevation", http.StatusBadGateway)
 		return
 	}

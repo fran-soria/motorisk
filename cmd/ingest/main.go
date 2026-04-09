@@ -73,7 +73,9 @@ func fetchRoadGeometry(osrmURL string, fromLon, fromLat, toLon, toLat float64) (
 }
 
 func main() {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Printf("warn: no se pudo cargar .env: %v", err)
+	}
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -127,7 +129,9 @@ func main() {
 			string(geom),
 		)
 		if err != nil {
-			log.Fatalf("error insertando segmento %s: %v", s.ID, err)
+			log.Printf("warn: error insertando segmento %s: %v", s.ID, err)
+			failed++
+			continue
 		}
 		inserted++
 	}

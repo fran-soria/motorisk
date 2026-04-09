@@ -54,6 +54,10 @@ func Parse(r io.Reader) ([]Segment, error) {
 
 	segments := make([]Segment, 0, len(p.Locations))
 	for _, loc := range p.Locations {
+		if loc.Location.From.Lat == 0 || loc.Location.From.Lon == 0 ||
+			loc.Location.To.Lat == 0 || loc.Location.To.Lon == 0 {
+			continue
+		}
 		segments = append(segments, Segment{
 			ID:        loc.ID,
 			Road:      loc.Location.Road,

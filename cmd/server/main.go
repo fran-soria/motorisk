@@ -7,12 +7,14 @@ import (
 	"os"
 
 	"github.com/fran-soria/motorisk/internal/api"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Printf("warn: no se pudo cargar .env: %v", err)
+	}
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -26,13 +28,13 @@ func main() {
 
 	ctx := context.Background()
 
-	conn, err := pgx.Connect(ctx, dbURL)
+	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Error conectando a la base de datos: %v", err)
 	}
-	defer conn.Close(ctx)
+	defer pool.Close()
 
-	srv := api.NewServer(conn)
+	srv := api.NewServer(pool)
 
 	log.Printf("Servidor escuchando en :%s", port)
 	if err := http.ListenAndServe(":"+port, srv.Routes()); err != nil {

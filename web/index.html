@@ -995,6 +995,8 @@ let weatherVisible  = true;
 let selectedDate = new Date();
 let selectedHour = new Date().getHours();
 let isNow        = true;
+let _analyzeDebounce    = null;
+let _analyzeController  = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1028,58 +1030,6 @@ function sampleCoords(coords) {
   if (result[result.length - 1] !== coords[coords.length - 1])
     result.push(coords[coords.length - 1]);
   return result;
-}
-
-async function fetchWeatherHourly(coords) {
-  const pts  = sampleCoords(coords);
-  const lats = pts.map(p => p[1]).join(',');
-  const lons = pts.map(p => p[0]).join(',');
-  const vars = 'windspeed_10m,winddirection_10m,precipitation,visibility';
-
-  const routeKms = [0];
-  for (let i = 1; i < pts.length; i++)
-    routeKms.push(routeKms[i-1] + haversineKm(pts[i-1][1], pts[i-1][0], pts[i][1], pts[i][0]));
-
-  let url, utcHour;
-
-  if (isNow) {
-    url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=${vars}&wind_speed_unit=kmh`;
-  } else {
-    const yyyy = selectedDate.getFullYear();
-    const mm   = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const dd   = String(selectedDate.getDate()).padStart(2, '0');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    const utcOffset = -new Date().getTimezoneOffset() / 60;
-    utcHour = (selectedHour - utcOffset + 24) % 24;
-    url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=${vars}&wind_speed_unit=kmh&start_date=${dateStr}&end_date=${dateStr}`;
-  }
-
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Open-Meteo ${resp.status}`);
-  const data = await resp.json();
-  const locations = Array.isArray(data) ? data : [data];
-
-  return locations.map((loc, i) => {
-    let windSpd, windDir, prec, vis;
-    if (isNow) {
-      windSpd = loc.current.windspeed_10m     ?? 0;
-      windDir = loc.current.winddirection_10m ?? 0;
-      prec    = loc.current.precipitation     ?? 0;
-      vis     = (loc.current.visibility       ?? 0) / 1000;
-    } else {
-      windSpd = loc.hourly.windspeed_10m[utcHour]     ?? 0;
-      windDir = loc.hourly.winddirection_10m[utcHour] ?? 0;
-      prec    = loc.hourly.precipitation[utcHour]     ?? 0;
-      vis     = (loc.hourly.visibility[utcHour]       ?? 0) / 1000;
-    }
-    const km = Math.round(routeKms[i] * 10) / 10;
-    return {
-      route_km: km, lat: pts[i][1], lon: pts[i][0],
-      wind_speed_kmh: windSpd, wind_direction_deg: windDir,
-      precipitation_mm: prec, visibility_km: vis,
-      alert: windSpd > 50 || prec > 0.5 || vis < 1.0,
-    };
-  });
 }
 
 // ── Settings panel ─────────────────────────────────────────────────────────
@@ -1275,7 +1225,7 @@ function createMarker(latlng) {
     const i = waypoints.findIndex(w => w.marker === marker);
     if (i !== -1) {
       await deleteWaypoint(i);
-      if (resultsPanel.classList.contains('open')) analyzeRoute();
+      scheduleAnalyze();
     }
   });
 
@@ -1307,7 +1257,7 @@ function createMarker(latlng) {
     const i  = waypoints.findIndex(w => w.marker === marker);
     if (i !== -1) await moveWaypoint(i, [ll.lat, ll.lng]);
     setTimeout(() => { isDragging = false; }, 50);
-    if (resultsPanel.classList.contains('open')) analyzeRoute();
+    scheduleAnalyze();
   });
 
   return marker;
@@ -1404,31 +1354,55 @@ map.on('click', async (e) => {
   if (isDragging) return;
   const { lat, lng } = e.latlng;
   await addWaypoint([lat, lng]);
-  if (resultsPanel.classList.contains('open')) analyzeRoute();
+  scheduleAnalyze();
 });
 
 // ── Analyze ────────────────────────────────────────────────────────────────
 
+function scheduleAnalyze() {
+  if (!resultsPanel.classList.contains('open')) return;
+  clearTimeout(_analyzeDebounce);
+  _analyzeDebounce = setTimeout(analyzeRoute, 800);
+}
+
 async function analyzeRoute() {
+  if (_analyzeController) _analyzeController.abort();
+  _analyzeController = new AbortController();
+  const { signal } = _analyzeController;
+
   btnAnalyze.disabled = true;
   btnAnalyze.innerHTML = '<span style="animation:pulse 1.2s ease-in-out infinite">Analizando</span>';
   clearResults();
 
-  const body = JSON.stringify({ coordinates: getRouteCoordinates() });
-  const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body };
+  const coords = getRouteCoordinates();
+  const body = JSON.stringify({ coordinates: coords });
+  const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal };
+
+  const weatherBody = { coordinates: coords };
+  if (!isNow) {
+    const yyyy = selectedDate.getFullYear();
+    const mm   = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const dd   = String(selectedDate.getDate()).padStart(2, '0');
+    const utcOffset = -new Date().getTimezoneOffset() / 60;
+    weatherBody.date = `${yyyy}-${mm}-${dd}`;
+    weatherBody.hour = (selectedHour - utcOffset + 24) % 24;
+  }
+  const weatherOpts = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(weatherBody),
+    signal,
+  };
 
   try {
     const checkOk = async r => {
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${await r.text()}`);
       return r.json();
     };
-    const weatherFetch = isNow
-      ? fetch(`${API}/route/weather`, opts).then(checkOk)
-      : fetchWeatherHourly(getRouteCoordinates());
 
     const [segs, weatherPts, elevPts] = await Promise.all([
       fetch(`${API}/route/segments`, opts).then(checkOk),
-      weatherFetch,
+      fetch(`${API}/route/weather`, weatherOpts).then(checkOk),
       fetch(`${API}/route/elevation`, opts).then(checkOk),
     ]);
 
@@ -1438,6 +1412,7 @@ async function analyzeRoute() {
     resultsPanel.classList.add('open');
     document.body.classList.add('panel-open');
   } catch (err) {
+    if (err.name === 'AbortError') return;
     console.error(err);
   }
 
@@ -1576,7 +1551,6 @@ function renderWeatherResults(pts) {
 
     const svgArrow = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" style="transform:rotate(' + windDeg + 'deg)" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-up-icon lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
 
-      <!-- '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="transform:rotate(' + windDeg + 'deg);flex-shrink:0"><line x1="7" y1="11" x2="7" y2="3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M4 6l3-3 3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'; -->
     const svgRain  = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-droplet-icon lucide-droplet"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>';
     const svgVis = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-haze-icon lucide-haze"><path d="m5.2 6.2 1.4 1.4"/><path d="M2 13h2"/><path d="M20 13h2"/><path d="m17.4 7.6 1.4-1.4"/><path d="M22 17H2"/><path d="M22 21H2"/><path d="M16 13a4 4 0 0 0-8 0"/><path d="M12 5V2.5"/></svg>';
 
