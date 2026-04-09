@@ -1,6 +1,12 @@
-# motorisk*
 
-Route analysis tool for motorcyclists in Spain. Draw a route on the map and get an overlay of DGT high-risk segments, real road geometry via OSRM, and weather conditions from Open-Meteo.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/motorisk-dark.gif">
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/motorisk-light.gif">
+  <img src="screenshots/motorisk-light.gif" alt="motorisk" height="100">
+</picture>
+
+
+Route analysis tool for motorcyclists in Spain. Draw a route on the map and get an overlay of DGT high-risk segments, real road geometry via OSRM, weather conditions, and an elevation profile.
 
 ![motorisk — tramos de riesgo](screenshots/tramos-riesgo.png)
 ![motorisk — condiciones meteorológicas](screenshots/condiciones-meteo.png)
@@ -9,9 +15,11 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 
 **Risk segments** ingest DGT's official DATEX2 feed of high-risk motorcycle segments and store them in PostGIS. When you submit a route, a spatial intersection query (`ST_Intersects`) returns every flagged segment your route crosses, with road badge, province, and kilometrage.
 
-**Real road geometry** snaps routes to actual roads via a self-hosted OSRM instance built from OpenStreetMap data covering mainland Spain and the Canary Islands, merged into a single routing graph. No straight lines between clicks.
+**Real road geometry** snaps routes to actual roads via a self-hosted OSRM instance built from OpenStreetMap data covering mainland Spain and the Canary Islands, merged into a single routing graph. Waypoints snap to the nearest road on click. No straight lines between clicks.
 
-**Weather** samples the route at 50 km intervals and queries Open-Meteo for wind speed, precipitation, and visibility at each point. Supports forecast lookup up to 7 days ahead with per-hour resolution.
+**Weather** samples the route at 50 km intervals and queries Open-Meteo for wind speed, precipitation, and visibility at each point. Supports forecast lookup up to 7 days ahead with per-hour resolution. Alert conditions (wind > 50 km/h, precipitation > 0.5 mm, visibility < 1 km) are flagged on both the map and the elevation profile.
+
+**Elevation profile** samples the route geometry and queries the Open-Meteo Elevation API (Copernicus DEM GLO-90, 90 m resolution) to render an interactive profile chart with min/max altitude, cumulative gain, and weather alert markers.
 
 ## Stack
 
@@ -22,7 +30,7 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 | Routing | OSRM (self-hosted, MLD algorithm) |
 | Road data | OpenStreetMap via Geofabrik |
 | Risk data | DGT — Punto de Acceso Nacional (DATEX2) |
-| Weather | Open-Meteo |
+| Weather & elevation | Open-Meteo |
 | Frontend | HTML + Leaflet.js (single file, no bundler) |
 | Infrastructure | Docker Compose + Colima |
 
@@ -31,10 +39,11 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 ```
 POST /route/segments   →  ST_Intersects(route, risk_segments) on PostGIS
 POST /route/weather    →  Open-Meteo hourly/current forecast per sampled point
+POST /route/elevation  →  Open-Meteo Elevation API (Copernicus DEM GLO-90)
 GET  /health           →  liveness check
 ```
 
-The frontend calls all endpoints in parallel via `Promise.all` after the user draws a route. OSRM road-snapping happens client-side before the API calls, so the intersection query uses actual road geometry rather than straight lines between clicks.
+The frontend calls all three endpoints in parallel via `Promise.all` after the user draws a route. OSRM road-snapping happens client-side before the API calls, so the intersection query uses actual road geometry rather than straight lines between clicks.
 
 ## Spatial query
 
@@ -143,7 +152,7 @@ With Colima, the VM is typically accessible at `192.168.64.2` rather than `local
 
 - **DGT risk segments**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas), DATEX2, updated on occurrence
 - **Road network**: [Geofabrik Spain](https://download.geofabrik.de/europe/spain.html) + [Canary Islands](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
-- **Weather**: [Open-Meteo](https://open-meteo.com), free for non-commercial use
+- **Weather & elevation**: [Open-Meteo](https://open-meteo.com), free for non-commercial use
 
 ## Themes
 
@@ -163,6 +172,7 @@ Six colour themes based on iconic motorcycles, each referencing original factory
 - DGT data covers the national road network only (excludes Catalonia and the Basque Country for most datasets).
 - OSRM map matching uses the `car` profile, appropriate for motorcycles on paved roads.
 - Weather sampling is at 50 km intervals; conditions between points are not interpolated.
+- Elevation resolution is 90 m (Copernicus DEM GLO-90).
 
 ## License
 
@@ -172,17 +182,24 @@ MIT
 
 ---
 
-# motorisk*
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/motorisk-dark.gif">
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/motorisk-light.gif">
+  <img src="screenshots/motorisk-light.gif" alt="motorisk" height="100">
+</picture>
 
-Herramienta de análisis de rutas para motoristas en España. Traza una ruta en el mapa y obtén los tramos de alto riesgo de la DGT, la geometría real de la carretera vía OSRM y las condiciones meteorológicas de Open-Meteo.
+
+Herramienta de análisis de rutas para motoristas en España. Traza una ruta en el mapa y obtén los tramos de alto riesgo de la DGT, la geometría real de la carretera vía OSRM, las condiciones meteorológicas y un perfil de elevación interactivo.
 
 ## Qué hace
 
 **Tramos de riesgo:** ingesta el feed DATEX2 oficial de la DGT de tramos de elevado riesgo para motocicletas y los almacena en PostGIS. Al enviar una ruta, una query de intersección espacial devuelve cada tramo señalizado que cruza tu ruta.
 
-**Geometría real de carretera:** las rutas se ajustan a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium.
+**Geometría real de carretera:** las rutas se ajustan a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium. Los waypoints se snapean a la carretera más cercana al hacer click.
 
-**Meteorología:** muestrea la ruta cada 50 km y consulta Open-Meteo para obtener velocidad del viento, precipitación y visibilidad. Permite consultar el forecast hasta 7 días vista con resolución horaria.
+**Meteorología:** muestrea la ruta cada 50 km y consulta Open-Meteo para obtener velocidad del viento, precipitación y visibilidad. Permite consultar el forecast hasta 7 días vista con resolución horaria. Las alertas se marcan en el mapa y en el perfil de elevación.
+
+**Perfil de elevación:** muestrea la geometría de la ruta y consulta la API de elevación de Open-Meteo (Copernicus DEM GLO-90, resolución 90 m) para renderizar un gráfico interactivo con altitud mínima/máxima, desnivel acumulado y marcadores de alertas meteorológicas.
 
 ## Ejecutar en local
 
@@ -192,4 +209,5 @@ Ver la versión en inglés para instrucciones completas. Variables de entorno en
 
 - **Tramos de riesgo DGT**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas): DATEX2
 - **Red viaria**: [Geofabrik España](https://download.geofabrik.de/europe/spain.html) + [Canarias](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
-- **Meteorología**: [Open-Meteo](https://open-meteo.com)
+- **Meteorología y elevación**: [Open-Meteo](https://open-meteo.com)
+
