@@ -5,8 +5,8 @@
 osrm-data/
 
 # Internal documentation
+logos/
 BACKLOG.md
-DECISIONS.md
 CLAUDE.md
 
 # macOS

@@ -159,6 +159,102 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+type elevationPoint struct {
+	RouteKm    float64 `json:"route_km"`
+	Lat        float64 `json:"lat"`
+	Lon        float64 `json:"lon"`
+	ElevationM float64 `json:"elevation_m"`
+}
+
+type openMeteoElevation struct {
+	Elevation []float64 `json:"elevation"`
+}
+
+func (s *Server) handleElevation(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Coordinates [][2]float64 `json:"coordinates"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "body inválido", http.StatusBadRequest)
+		return
+	}
+	if len(body.Coordinates) < 2 {
+		http.Error(w, "la ruta necesita al menos 2 puntos", http.StatusBadRequest)
+		return
+	}
+
+	coords := body.Coordinates
+	step := len(coords) / 60
+	if step < 1 {
+		step = 1
+	}
+	sampled := make([][2]float64, 0)
+	for i, c := range coords {
+		if i%step == 0 {
+			sampled = append(sampled, c)
+		}
+	}
+	last := coords[len(coords)-1]
+	if sampled[len(sampled)-1] != last {
+		sampled = append(sampled, last)
+	}
+
+	lats := make([]string, len(sampled))
+	lons := make([]string, len(sampled))
+	for i, c := range sampled {
+		lats[i] = fmt.Sprintf("%f", c[1])
+		lons[i] = fmt.Sprintf("%f", c[0])
+	}
+
+	url := fmt.Sprintf(
+		"https://api.open-meteo.com/v1/elevation?latitude=%s&longitude=%s",
+		strings.Join(lats, ","),
+		strings.Join(lons, ","),
+	)
+
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		http.Error(w, "error consultando Open-Meteo elevation", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("Open-Meteo elevation devolvió %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+
+	var elev openMeteoElevation
+	if err := json.NewDecoder(resp.Body).Decode(&elev); err != nil {
+		http.Error(w, "error procesando respuesta de elevación", http.StatusBadGateway)
+		return
+	}
+
+	if len(elev.Elevation) != len(sampled) {
+		http.Error(w, "respuesta de elevación incompleta", http.StatusBadGateway)
+		return
+	}
+
+	routeKms := make([]float64, len(sampled))
+	for i := 1; i < len(sampled); i++ {
+		routeKms[i] = routeKms[i-1] + haversineKm(sampled[i-1][1], sampled[i-1][0], sampled[i][1], sampled[i][0])
+	}
+
+	result := make([]elevationPoint, len(sampled))
+	for i, c := range sampled {
+		km := math.Round(routeKms[i]*10) / 10
+		result[i] = elevationPoint{
+			RouteKm:    km,
+			Lat:        c[1],
+			Lon:        c[0],
+			ElevationM: elev.Elevation[i],
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
