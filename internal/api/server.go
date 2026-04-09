@@ -7,14 +7,14 @@ import (
 	"strings"
 
 	"github.com/fran-soria/motorisk/internal/datex2"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Server struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewServer(db *pgx.Conn) *Server {
+func NewServer(db *pgxpool.Pool) *Server {
 	return &Server{db: db}
 }
 
