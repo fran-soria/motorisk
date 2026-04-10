@@ -11,11 +11,13 @@ import (
 )
 
 type Server struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	cache   *Cache
+	osrmURL string
 }
 
-func NewServer(db *pgxpool.Pool) *Server {
-	return &Server{db: db}
+func NewServer(db *pgxpool.Pool, osrmURL string) *Server {
+	return &Server{db: db, cache: NewCache(), osrmURL: strings.TrimRight(osrmURL, "/")}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -24,6 +26,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /route/segments", s.handleRoute)
 	mux.HandleFunc("POST /route/weather", s.handleWeather)
 	mux.HandleFunc("POST /route/elevation", s.handleElevation)
+	mux.HandleFunc("POST /route/snap", s.handleSnap)
+	mux.HandleFunc("POST /route/geometry", s.handleGeometry)
 	return corsMiddleware(mux)
 }
 

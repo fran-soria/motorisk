@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type segmentResponse struct {
@@ -134,6 +135,13 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
+	cacheKey := CacheKey("weather", []byte(url))
+	if cached, ok := s.cache.Get(cacheKey); ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(cached)
+		return
+	}
+
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		http.Error(w, "error interno", http.StatusInternalServerError)
@@ -201,8 +209,14 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 		result[i] = pt
 	}
 
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		http.Error(w, "error serializando respuesta", http.StatusInternalServerError)
+		return
+	}
+	s.cache.Set(cacheKey, encoded, 10*time.Minute)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	w.Write(encoded)
 }
 
 type elevationPoint struct {
@@ -258,6 +272,13 @@ func (s *Server) handleElevation(w http.ResponseWriter, r *http.Request) {
 		strings.Join(lons, ","),
 	)
 
+	cacheKey := CacheKey("elevation", []byte(url))
+	if cached, ok := s.cache.Get(cacheKey); ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(cached)
+		return
+	}
+
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		http.Error(w, "error interno", http.StatusInternalServerError)
@@ -305,8 +326,116 @@ func (s *Server) handleElevation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		http.Error(w, "error serializando respuesta", http.StatusInternalServerError)
+		return
+	}
+	s.cache.Set(cacheKey, encoded, NoExpiry)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	w.Write(encoded)
+}
+
+type snapResponse struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+}
+
+type geometryResponse struct {
+	Coordinates [][]float64 `json:"coordinates"`
+	Distance    float64     `json:"distance"`
+}
+
+type osrmNearestResponse struct {
+	Code      string `json:"code"`
+	Waypoints []struct {
+		Location [2]float64 `json:"location"`
+	} `json:"waypoints"`
+}
+
+type osrmRouteResponse struct {
+	Code   string `json:"code"`
+	Routes []struct {
+		Distance float64 `json:"distance"`
+		Geometry struct {
+			Coordinates [][]float64 `json:"coordinates"`
+		} `json:"geometry"`
+	} `json:"routes"`
+}
+
+func (s *Server) handleSnap(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Lat float64 `json:"lat"`
+		Lon float64 `json:"lon"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "body inválido", http.StatusBadRequest)
+		return
+	}
+
+	url := fmt.Sprintf("%s/nearest/v1/driving/%f,%f", s.osrmURL, body.Lon, body.Lat)
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		http.Error(w, "error consultando OSRM", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result osrmNearestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		http.Error(w, "error procesando respuesta OSRM", http.StatusBadGateway)
+		return
+	}
+
+	if result.Code != "Ok" || len(result.Waypoints) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(snapResponse{Lat: body.Lat, Lon: body.Lon})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(snapResponse{
+		Lat: result.Waypoints[0].Location[1],
+		Lon: result.Waypoints[0].Location[0],
+	})
+}
+
+func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		From [2]float64 `json:"from"` // [lat, lon]
+		To   [2]float64 `json:"to"`   // [lat, lon]
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "body inválido", http.StatusBadRequest)
+		return
+	}
+
+	url := fmt.Sprintf("%s/route/v1/driving/%f,%f;%f,%f?geometries=geojson&overview=full",
+		s.osrmURL, body.From[1], body.From[0], body.To[1], body.To[0])
+
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		http.Error(w, "error consultando OSRM", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result osrmRouteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		http.Error(w, "error procesando respuesta OSRM", http.StatusBadGateway)
+		return
+	}
+
+	if result.Code != "Ok" || len(result.Routes) == 0 {
+		http.Error(w, "OSRM no encontró ruta", http.StatusUnprocessableEntity)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(geometryResponse{
+		Coordinates: result.Routes[0].Geometry.Coordinates,
+		Distance:    result.Routes[0].Distance,
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

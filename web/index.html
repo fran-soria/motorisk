@@ -735,9 +735,9 @@
   <div id="panel-footer">Datos: DGT · Open-Meteo</div>
 </div>
 
+<script src="config.js"></script>
 <script>
-const OSRM = 'http://192.168.64.2:5000';
-const API  = 'http://localhost:8080';
+const API  = window.MOTORISK_CONFIG?.API_URL  ?? 'http://localhost:8080';
 
 // ── Themes ─────────────────────────────────────────────────────────────────
 
@@ -1191,11 +1191,15 @@ function makePointIcon() {
 }
 
 async function fetchRoadSegment(from, to, signal) {
-  const url  = `${OSRM}/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?geometries=geojson&overview=full`;
-  const res  = await fetch(url, signal ? { signal } : undefined);
+  const res = await fetch(`${API}/route/geometry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+    ...(signal ? { signal } : {}),
+  });
+  if (!res.ok) return null;
   const data = await res.json();
-  if (data.code !== 'Ok' || !data.routes.length) return null;
-  return { geometry: data.routes[0].geometry, distance: data.routes[0].distance };
+  return { geometry: { type: 'LineString', coordinates: data.coordinates }, distance: data.distance };
 }
 
 function buildSegment(result) {
@@ -1267,11 +1271,14 @@ function createMarker(latlng) {
 
 async function snapToRoad(latlng) {
   const [lat, lng] = latlng;
-  const res = await fetch(`${OSRM}/nearest/v1/driving/${lng},${lat}`);
+  const res = await fetch(`${API}/route/snap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lat, lon: lng }),
+  });
+  if (!res.ok) return latlng;
   const data = await res.json();
-  if (data.code !== 'Ok' || !data.waypoints?.length) return latlng;
-  const [snappedLng, snappedLat] = data.waypoints[0].location;
-  return [snappedLat, snappedLng];
+  return [data.lat, data.lon];
 }
 
 async function addWaypoint(latlng) {

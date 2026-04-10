@@ -1,5 +1,8 @@
 # Environment and secrets
 .env
+.env.prod
+nginx/certs/
+web/config.js
 
 # OSRM data — several GB, regenerate following the README
 osrm-data/
