@@ -1,0 +1,61 @@
+services:
+  db:
+    image: imresamu/postgis:17-3.5-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend
+    restart: unless-stopped
+    command: osrm-routed --algorithm mld /data/spain-with-canary-islands.osrm
+    volumes:
+      - ./osrm-data:/data
+    networks:
+      - internal
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      OSRM_URL: http://osrm:5000
+      PORT: 8080
+    depends_on:
+      - db
+      - osrm
+    networks:
+      - internal
+      - external
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./web:/var/www/html:ro
+      - certbot-www:/var/www/certbot:ro
+    depends_on:
+      - api
+    networks:
+      - external
+
+networks:
+  internal:
+    driver: bridge
+  external:
+    driver: bridge
+
+volumes:
+  pgdata:
+  certbot-www:
