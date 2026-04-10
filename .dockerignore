@@ -1,0 +1,7 @@
+osrm-data/
+.env
+.env.prod
+.git/
+logos/
+screenshots/
+web/config.js
