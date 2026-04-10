@@ -292,7 +292,10 @@
       flex-shrink: 0;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin {
+      from { transform: translateY(5%) rotate(0deg); } 
+      to { transform: translateY(5%) rotate(360deg); } 
+    }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
@@ -631,7 +634,7 @@
 
 <!-- Brand chip + theme selector -->
 <div id="brand-group" class="float">
-  <div id="brand"><div style="display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:600;letter-spacing:-0.02em;color:var(--text);">
+  <div id="brand"><div style="display:inline-flex;align-items:center;font-size:13px;font-weight:600;letter-spacing:-0.02em;color:var(--text);">
     motorisk
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" style="animation: spin 8s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-asterisk-icon lucide-asterisk"><path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/></svg>
   </div></div>
