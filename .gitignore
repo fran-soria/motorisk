@@ -8,7 +8,6 @@ web/config.js
 osrm-data/
 
 # Internal documentation
-logos/
 .mov
 BACKLOG.md
 CLAUDE.md
