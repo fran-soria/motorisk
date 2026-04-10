@@ -1,12 +1,12 @@
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="screenshots/motorisk-dark.gif">
   <source media="(prefers-color-scheme: light)" srcset="screenshots/motorisk-light.gif">
   <img src="screenshots/motorisk-light.gif" alt="motorisk" height="100">
 </picture>
 
-
 Route analysis tool for motorcyclists in Spain. Draw a route on the map and get an overlay of DGT high-risk segments, real road geometry via OSRM, weather conditions, and an elevation profile.
+
+**Live at [motorisk.app](https://motorisk.app)**
 
 ![motorisk — tramos de riesgo](screenshots/tramos-riesgo.png)
 ![motorisk — condiciones meteorológicas](screenshots/condiciones-meteo.png)
@@ -32,7 +32,7 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 | Risk data | DGT — Punto de Acceso Nacional (DATEX2) |
 | Weather & elevation | Open-Meteo |
 | Frontend | HTML + Leaflet.js (single file, no bundler) |
-| Infrastructure | Docker Compose + Colima |
+| Infrastructure | Docker Compose + nginx, hosted on Hetzner CX22 |
 
 ## Architecture
 
@@ -40,10 +40,12 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 POST /route/segments   →  ST_Intersects(route, risk_segments) on PostGIS
 POST /route/weather    →  Open-Meteo hourly/current forecast per sampled point
 POST /route/elevation  →  Open-Meteo Elevation API (Copernicus DEM GLO-90)
+POST /route/snap       →  OSRM nearest — snaps a point to the road network
+POST /route/geometry   →  OSRM route — road geometry between two points
 GET  /health           →  liveness check
 ```
 
-The frontend calls all three endpoints in parallel via `Promise.all` after the user draws a route. OSRM road-snapping happens client-side before the API calls, so the intersection query uses actual road geometry rather than straight lines between clicks.
+The frontend calls the first three endpoints in parallel via `Promise.all` after the user draws a route. Road-snapping and geometry fetching go through the backend — OSRM is not exposed publicly. Open-Meteo responses are cached in memory (elevation: permanent, weather: 10 min) to avoid rate limits.
 
 ## Spatial query
 
@@ -188,14 +190,15 @@ MIT
   <img src="screenshots/motorisk-light.gif" alt="motorisk" height="100">
 </picture>
 
-
 Herramienta de análisis de rutas para motoristas en España. Traza una ruta en el mapa y obtén los tramos de alto riesgo de la DGT, la geometría real de la carretera vía OSRM, las condiciones meteorológicas y un perfil de elevación interactivo.
+
+**En producción en [motorisk.app](https://motorisk.app)**
 
 ## Qué hace
 
 **Tramos de riesgo:** ingesta el feed DATEX2 oficial de la DGT de tramos de elevado riesgo para motocicletas y los almacena en PostGIS. Al enviar una ruta, una query de intersección espacial devuelve cada tramo señalizado que cruza tu ruta.
 
-**Geometría real de carretera:** las rutas se ajustan a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium. Los waypoints se snapean a la carretera más cercana al hacer click.
+**Geometría real de carretera:** las rutas se ajustan a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium. Los waypoints se snapean a la carretera más cercana al hacer click. OSRM no está expuesto públicamente — el backend actúa como proxy.
 
 **Meteorología:** muestrea la ruta cada 50 km y consulta Open-Meteo para obtener velocidad del viento, precipitación y visibilidad. Permite consultar el forecast hasta 7 días vista con resolución horaria. Las alertas se marcan en el mapa y en el perfil de elevación.
 
@@ -210,4 +213,3 @@ Ver la versión en inglés para instrucciones completas. Variables de entorno en
 - **Tramos de riesgo DGT**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas): DATEX2
 - **Red viaria**: [Geofabrik España](https://download.geofabrik.de/europe/spain.html) + [Canarias](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
 - **Meteorología y elevación**: [Open-Meteo](https://open-meteo.com)
-
