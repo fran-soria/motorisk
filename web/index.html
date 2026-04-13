@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>motorisk</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700,800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +20,8 @@
       --muted:        #98989d;
       --accent-risk:  #ff453a;
       --accent-route: #0a84ff;
-      --sans:  -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --sans:  'Switzer', -apple-system, BlinkMacSystemFont, sans-serif;
+      --brand: 'Switzer', sans-serif;
       --mono:  'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
       --blur:  blur(20px) saturate(180%);
     }
@@ -48,7 +51,8 @@
 
     .leaflet-control-attribution a { color: var(--muted) !important; }
 
-    .leaflet-top.leaflet-left { top: 50px !important; left: 8px !important; }
+    .leaflet-top.leaflet-left { top: 55px !important; left: 8px !important; transition: top 350ms cubic-bezier(0.4, 0, 0.2, 1); }
+    body.tutorial-open .leaflet-top.leaflet-left { top: 140px !important; }
 
     .leaflet-control-zoom { border: none !important; }
 
@@ -102,8 +106,7 @@
 
     #brand {
       display: flex;
-      align-items: center;
-      gap: 7px;
+      align-items: flex-start;
       padding: 8px 8px 8px 10px;
       background: var(--surface);
       backdrop-filter: var(--blur);
@@ -114,9 +117,83 @@
       font-size: 12px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      pointer-events: none;
+      pointer-events: auto;
       user-select: none;
+      cursor: pointer;
+      min-width: 0;
+      transition: min-width 200ms cubic-bezier(0.4, 0, 0.2, 1);
     }
+
+    /* ── Tutorial ── */
+    #brand { position: relative; }
+
+    #brand.tutorial-expanded,
+    #brand.tutorial-collapsing {
+      flex-direction: column;
+      gap: 0;
+      min-width: 220px;
+    }
+
+    #brand.tutorial-expanded { transition: none; }
+
+    #brand-group.tutorial-open { align-items: flex-start; }
+
+    #brand-tutorial {
+      width: 0;
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height 350ms cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity   350ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #brand.tutorial-expanded #brand-tutorial,
+    #brand.tutorial-collapsing #brand-tutorial {
+      width: 100%;
+    }
+
+    #brand.tutorial-expanded #brand-tutorial {
+      max-height: 160px;
+      opacity: 1;
+    }
+
+    .tutorial-sep {
+      width: 100%;
+      height: 0.5px;
+      background: var(--border);
+      margin: 7px 0 5px;
+    }
+
+    .tutorial-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 3px 0;
+    }
+
+    .tutorial-icon {
+      margin-right: 2px;
+    }
+
+    .tutorial-action {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .tutorial-desc {
+      font-family: var(--sans);
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+
 
     /* ── Theme selector ── */
     #btn-theme {
@@ -235,11 +312,30 @@
     }
 
     #chip-info {
-      font-size: 12px;
+      font-family: var(--sans);
+      font-size: 11px;
       color: var(--muted);
     }
 
     #chip-info strong { color: var(--text); font-weight: 500; }
+
+    /* ── Bottom bar separator ── */
+    .bar-sep {
+      width: 0.5px;
+      height: 14px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ── Settings chip active state ── */
+    #btn-settings { transition: background 0.15s; }
+    #btn-settings.settings-open { background: var(--border); }
+    #settings-chevron {
+      color: var(--muted);
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    #btn-settings.settings-open #settings-chevron { transform: rotate(180deg); }
 
     #btn-analyze {
       display: none;
@@ -381,10 +477,11 @@
     }
 
     #panel-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-family: var(--brand);
+      font-size: 15px;
+      font-weight: 700;
       color: var(--text);
-      letter-spacing: 0.01em;
+      letter-spacing: 0;
     }
 
     #panel-subtitle {
@@ -486,10 +583,11 @@
     }
 
     .section-title {
-      font-size: 11px;
-      font-weight: 600;
+      font-family: var(--brand);
+      font-size: 12px;
+      font-weight: 700;
       color: var(--text);
-      letter-spacing: 0.01em;
+      letter-spacing: 0;
     }
 
     .section-subtitle {
@@ -634,10 +732,18 @@
 
 <!-- Brand chip + theme selector -->
 <div id="brand-group" class="float">
-  <div id="brand"><div style="display:inline-flex;align-items:center;font-size:13px;font-weight:600;letter-spacing:-0.02em;color:var(--text);">
+  <div id="brand"><div id="brand-header" style="display:inline-flex;align-items:center;font-family:'Switzer',sans-serif;font-size:17px;font-weight:700;letter-spacing:0;color:var(--text);">
     motorisk
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" style="animation: spin 8s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-asterisk-icon lucide-asterisk"><path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/></svg>
-  </div></div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" style="animation: spin 8s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-asterisk-icon lucide-asterisk"><path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/></svg>
+  </div>
+  <div id="brand-tutorial">
+    <div class="tutorial-sep"></div>
+    <div class="tutorial-row"><span class="tutorial-action"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mouse-left-icon lucide-mouse-left tutorial-icon"><path d="M12 7.318V10"/><path d="M5 10v5a7 7 0 0 0 14 0V9c0-3.527-2.608-6.515-6-7"/><circle cx="7" cy="4" r="2"/></svg>Click izquierdo</span><span class="tutorial-desc">Añadir punto</span></div>
+    <div class="tutorial-row"><span class="tutorial-action"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mouse-right-icon lucide-mouse-right tutorial-icon"><path d="M12 7.318V10"/><path d="M19 10v5a7 7 0 0 1-14 0V9c0-3.527 2.608-6.515 6-7"/><circle cx="17" cy="4" r="2"/></svg>Click derecho</span><span class="tutorial-desc">Eliminar punto</span></div>
+    <div class="tutorial-row"><span class="tutorial-action"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hand-icon lucide-hand tutorial-icon"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>Arrastrar</span><span class="tutorial-desc">Mover punto</span></div>
+  </div>
+
+  </div>
   <button id="btn-theme" aria-label="Cambiar tema">
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-motorbike-icon lucide-motorbike"><path d="m18 14-1-3"/><path d="m3 9 6 2a2 2 0 0 1 2-2h2a2 2 0 0 1 1.99 1.81"/><path d="M8 17h3a1 1 0 0 0 1-1 6 6 0 0 1 6-6 1 1 0 0 0 1-1v-.75A5 5 0 0 0 17 5"/><circle cx="19" cy="17" r="3"/><circle cx="5" cy="17" r="3"/></svg>
     <span id="theme-abbr"></span>
@@ -660,8 +766,13 @@
   <div id="btn-settings" class="chip" style="cursor:pointer;" onclick="toggleSettings()">
     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-sun-icon lucide-cloud-sun"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></svg>
     <span id="settings-label" style="font-size:11px;font-weight:500;">Ahora</span>
+    <svg id="settings-chevron" width="8" height="8" viewBox="0 0 8 8" fill="none">
+      <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
   </div>
+  <span class="bar-sep"></span>
   <div id="chip-info"></div>
+  <span class="bar-sep"></span>
   <button id="btn-analyze">Analizar ruta</button>
   <button id="btn-clear" aria-label="Limpiar ruta">
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -1001,6 +1112,62 @@ let isNow        = true;
 let _analyzeDebounce    = null;
 let _analyzeController  = null;
 
+// ── Onboarding tutorial ─────────────────────────────────────────────────────
+const tutorialBrandEl    = document.getElementById('brand');
+const tutorialBrandGroup = document.getElementById('brand-group');
+
+let tutorialExpanded    = false;
+let tutorialIdleTimer   = null;
+let _collapsingTimer    = null;
+
+function expandTutorial() {
+  clearTimeout(_collapsingTimer);
+  tutorialBrandEl.classList.remove('tutorial-collapsing');
+  tutorialExpanded = true;
+  tutorialBrandEl.classList.add('tutorial-expanded');
+  tutorialBrandGroup.classList.add('tutorial-open');
+  document.body.classList.add('tutorial-open');
+}
+
+function collapseTutorial() {
+  if (!tutorialExpanded) return;
+  tutorialExpanded = false;
+  tutorialBrandEl.classList.add('tutorial-collapsing');
+  tutorialBrandEl.classList.remove('tutorial-expanded');
+  tutorialBrandGroup.classList.remove('tutorial-open');
+  _collapsingTimer = setTimeout(() => {
+    tutorialBrandEl.classList.remove('tutorial-collapsing');
+    document.body.classList.remove('tutorial-open');
+  }, 360);
+}
+
+expandTutorial();
+
+function resetTutorialTimer() {
+  clearTimeout(tutorialIdleTimer);
+  tutorialIdleTimer = setTimeout(() => {
+    if (waypoints.length === 0) expandTutorial();
+  }, 20000);
+}
+resetTutorialTimer();
+
+tutorialBrandEl.addEventListener('click', () => {
+  if (tutorialExpanded) collapseTutorial();
+  else expandTutorial();
+});
+
+let _tutorialMouseDown = null;
+document.addEventListener('mousedown', (e) => { _tutorialMouseDown = { x: e.clientX, y: e.clientY }; });
+document.addEventListener('click', (e) => {
+  if (!tutorialExpanded || tutorialBrandEl.contains(e.target)) return;
+  if (_tutorialMouseDown) {
+    const dx = e.clientX - _tutorialMouseDown.x;
+    const dy = e.clientY - _tutorialMouseDown.y;
+    if (dx * dx + dy * dy > 25) return; // >5px → was a pan, not a click
+  }
+  collapseTutorial();
+});
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -1040,9 +1207,11 @@ function sampleCoords(coords) {
 const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 function toggleSettings() {
-  const panel   = document.getElementById('settings-panel');
+  const panel = document.getElementById('settings-panel');
+  const btn   = document.getElementById('btn-settings');
   const visible = panel.classList.contains('open');
   panel.classList.toggle('open', !visible);
+  btn.classList.toggle('settings-open', !visible);
   if (!visible) buildDayButtons();
 }
 
@@ -1142,8 +1311,10 @@ document.addEventListener('click', (e) => {
   const panel = document.getElementById('settings-panel');
   const btn   = document.getElementById('btn-settings');
   const path  = e.composedPath();
-  if (panel && !path.includes(panel) && !path.includes(btn))
+  if (panel && !path.includes(panel) && !path.includes(btn)) {
     panel.classList.remove('open');
+    btn.classList.remove('settings-open');
+  }
 });
 
 function cssVar(name) {
@@ -1288,6 +1459,7 @@ async function addWaypoint(latlng) {
   latlng = await snapToRoad(latlng);
   const marker = createMarker(latlng);
   waypoints.push({ latlng, marker });
+  if (waypoints.length === 1) collapseTutorial();
 
   if (waypoints.length > 1) {
     const prev   = waypoints[waypoints.length - 2].latlng;
@@ -1318,6 +1490,7 @@ async function deleteWaypoint(i) {
   }
 
   waypoints.splice(i, 1);
+  if (waypoints.length === 0) resetTutorialTimer();
 
   // Reconnect neighbors with a new segment
   if (hasPrev && hasNext) {
@@ -1727,6 +1900,7 @@ function clearAll() {
   document.getElementById('hour-label').textContent =
     String(selectedHour).padStart(2, '0') + ':00';
   document.getElementById('settings-panel').classList.remove('open');
+  resetTutorialTimer();
 }
 
 const EYE_OPEN = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
