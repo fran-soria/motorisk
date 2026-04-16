@@ -389,8 +389,8 @@
     }
 
     @keyframes spin {
-      from { transform: translateY(5%) rotate(0deg); } 
-      to { transform: translateY(5%) rotate(360deg); } 
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
 
     @keyframes pulse {
@@ -732,9 +732,9 @@
 
 <!-- Brand chip + theme selector -->
 <div id="brand-group" class="float">
-  <div id="brand"><div id="brand-header" style="display:inline-flex;align-items:center;font-family:'Switzer',sans-serif;font-size:17px;font-weight:700;letter-spacing:0;color:var(--text);">
+  <div id="brand"><div id="brand-header" style="display:inline-flex;align-items:center;height:20px;line-height:1;font-family:'Switzer',sans-serif;font-size:17px;font-weight:700;letter-spacing:0;color:var(--text);">
     motorisk
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" style="animation: spin 8s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-asterisk-icon lucide-asterisk"><path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" style="display:block;animation: spin 8s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="var(--accent-risk)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-asterisk-icon lucide-asterisk"><path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/></svg>
   </div>
   <div id="brand-tutorial">
     <div class="tutorial-sep"></div>
@@ -1102,6 +1102,7 @@ document.getElementById('hour-label').textContent = String(_initHour).padStart(2
 // invariant: segments.length === max(0, waypoints.length - 1)
 let waypoints       = [];
 let segments        = [];
+const moveSeq       = [];  // per-slot sequence numbers to discard out-of-order writes
 let riskLayers      = [];
 let weatherMarkers  = [];
 let riskVisible     = true;
@@ -1354,6 +1355,18 @@ function updateBottomBar() {
   }
 }
 
+let _chipErrorTimer = null;
+
+function showBottomBarError(msg) {
+  if (_chipErrorTimer) clearTimeout(_chipErrorTimer);
+  bottomBar.classList.add('visible');
+  chipInfo.textContent = msg;
+  _chipErrorTimer = setTimeout(() => {
+    _chipErrorTimer = null;
+    updateBottomBar();
+  }, 3000);
+}
+
 function makePointIcon() {
   const color = cssVar('--accent-route');
   return L.divIcon({
@@ -1365,13 +1378,22 @@ function makePointIcon() {
 }
 
 async function fetchRoadSegment(from, to, signal) {
-  const res = await fetch(`${API}/route/geometry`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to }),
-    ...(signal ? { signal } : {}),
-  });
-  if (!res.ok) return null;
+  let res;
+  try {
+    res = await fetch(`${API}/route/geometry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to }),
+      ...(signal ? { signal } : {}),
+    });
+  } catch (err) {
+    if (err.name !== 'AbortError') showBottomBarError('No se pudo trazar el segmento');
+    return null;
+  }
+  if (!res.ok) {
+    showBottomBarError('No se pudo trazar el segmento');
+    return null;
+  }
   const data = await res.json();
   return { geometry: { type: 'LineString', coordinates: data.coordinates }, distance: data.distance };
 }
@@ -1445,12 +1467,21 @@ function createMarker(latlng) {
 
 async function snapToRoad(latlng) {
   const [lat, lng] = latlng;
-  const res = await fetch(`${API}/route/snap`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lat, lon: lng }),
-  });
-  if (!res.ok) return latlng;
+  let res;
+  try {
+    res = await fetch(`${API}/route/snap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lon: lng }),
+    });
+  } catch {
+    showBottomBarError('No se pudo ajustar el punto a la carretera');
+    return latlng;
+  }
+  if (!res.ok) {
+    showBottomBarError('No se pudo ajustar el punto a la carretera');
+    return latlng;
+  }
   const data = await res.json();
   return [data.lat, data.lon];
 }
@@ -1476,17 +1507,17 @@ async function deleteWaypoint(i) {
   const hasPrev = i > 0;
   const hasNext = i < waypoints.length - 1;
 
-  // Remove segment before: segments[i-1]
-  if (hasPrev) {
-    if (segments[i - 1]) map.removeLayer(segments[i - 1].layer);
-    segments.splice(i - 1, 1);
-  }
+  // Collect the original indices of adjacent segments and remove them highest-first
+  // so that the first splice never shifts the index needed by the second.
+  const toRemove = [];
+  if (hasNext) toRemove.push(i);      // segment after waypoint i:  segments[i]
+  if (hasPrev) toRemove.push(i - 1); // segment before waypoint i: segments[i-1]
+  // toRemove is already descending (i > i-1), so splices are safe in order.
 
-  // After the splice above, old segments[i] shifted to i-1 (if hasPrev) or stays at i
-  const nextSegIdx = hasPrev ? i - 1 : i;
-  if (hasNext) {
-    if (segments[nextSegIdx]) map.removeLayer(segments[nextSegIdx].layer);
-    segments.splice(nextSegIdx, 1);
+  for (const j of toRemove) {
+    const seg = segments[j];
+    if (seg?.layer) map.removeLayer(seg.layer);
+    segments.splice(j, 1);
   }
 
   waypoints.splice(i, 1);
@@ -1507,6 +1538,10 @@ async function moveWaypoint(i, newLatlng, signal) {
   const hasPrev = i > 0;
   const hasNext = i < waypoints.length - 1;
 
+  // Stamp each segment slot before the await so a later call can invalidate this one.
+  const seqPrev = hasPrev ? (moveSeq[i - 1] = (moveSeq[i - 1] || 0) + 1) : null;
+  const seqNext = hasNext ? (moveSeq[i]     = (moveSeq[i]     || 0) + 1) : null;
+
   try {
     // Fetch both adjacent segments in parallel
     const [prevResult, nextResult] = await Promise.all([
@@ -1514,12 +1549,13 @@ async function moveWaypoint(i, newLatlng, signal) {
       hasNext ? fetchRoadSegment(newLatlng, waypoints[i + 1].latlng, signal) : Promise.resolve(null),
     ]);
 
-    if (hasPrev) {
+    // Only write if no newer call has claimed the slot while we were awaiting.
+    if (hasPrev && moveSeq[i - 1] === seqPrev) {
       if (segments[i - 1]) map.removeLayer(segments[i - 1].layer);
       segments[i - 1] = buildSegment(prevResult);
     }
 
-    if (hasNext) {
+    if (hasNext && moveSeq[i] === seqNext) {
       if (segments[i]) map.removeLayer(segments[i].layer);
       segments[i] = buildSegment(nextResult);
     }
@@ -1556,6 +1592,11 @@ async function analyzeRoute() {
   btnAnalyze.disabled = true;
   btnAnalyze.innerHTML = '<span style="animation:pulse 1.2s ease-in-out infinite">Analizando</span>';
   clearResults();
+  document.querySelectorAll('.panel-error').forEach(el => el.remove());
+  document.getElementById('section-risk').style.display      = '';
+  document.getElementById('section-elevation').style.display = '';
+  document.getElementById('section-weather').style.display   = '';
+  document.querySelectorAll('#results-list .section-divider').forEach(el => el.style.display = '');
 
   const coords = getRouteCoordinates();
   const body = JSON.stringify({ coordinates: coords });
@@ -1577,26 +1618,59 @@ async function analyzeRoute() {
     signal,
   };
 
-  try {
-    const checkOk = async r => {
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${await r.text()}`);
-      return r.json();
-    };
+  const checkOk = async r => {
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  };
 
-    const [segs, weatherPts, elevPts] = await Promise.all([
-      fetch(`${API}/route/segments`, opts).then(checkOk),
-      fetch(`${API}/route/weather`, weatherOpts).then(checkOk),
-      fetch(`${API}/route/elevation`, opts).then(checkOk),
-    ]);
+  const [segsResult, weatherResult, elevResult] = await Promise.allSettled([
+    fetch(`${API}/route/segments`, opts).then(checkOk),
+    fetch(`${API}/route/weather`, weatherOpts).then(checkOk),
+    fetch(`${API}/route/elevation`, opts).then(checkOk),
+  ]);
 
-    renderRiskResults(segs);
-    renderWeatherResults(weatherPts);
-    renderElevationChart(elevPts, weatherPts);
-    resultsPanel.classList.add('open');
-    document.body.classList.add('panel-open');
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    console.error(err);
+  // If aborted, a newer analysis is already in flight — discard silently.
+  if ([segsResult, weatherResult, elevResult].some(r => r.reason?.name === 'AbortError')) return;
+
+  const elevChart = document.getElementById('elevation-chart');
+  const allFailed = [segsResult, weatherResult, elevResult].every(r => r.status === 'rejected');
+
+  resultsPanel.classList.add('open');
+  document.body.classList.add('panel-open');
+
+  if (allFailed) {
+    const p = document.createElement('p');
+    p.className = 'panel-error';
+    p.style.cssText = 'margin:8px;font-size:11px;color:var(--muted);font-family:var(--sans);';
+    p.textContent = 'No se pudo conectar con el servidor';
+    const sectionRisk = document.getElementById('section-risk');
+    sectionRisk.parentNode.insertBefore(p, sectionRisk);
+    document.getElementById('section-risk').style.display      = 'none';
+    document.getElementById('section-elevation').style.display = 'none';
+    document.getElementById('section-weather').style.display   = 'none';
+    document.querySelectorAll('#results-list .section-divider').forEach(el => el.style.display = 'none');
+  } else {
+    const segs       = segsResult.status    === 'fulfilled' ? segsResult.value    : null;
+    const weatherPts = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
+    const elevPts    = elevResult.status    === 'fulfilled' ? elevResult.value    : null;
+
+    if (segsResult.status === 'rejected') {
+      renderSectionError(riskList, 'Error al cargar los tramos de riesgo');
+    } else {
+      renderRiskResults(segs);
+    }
+
+    if (weatherResult.status === 'rejected') {
+      renderSectionError(weatherList, 'Error al cargar la meteorología');
+    } else {
+      renderWeatherResults(weatherPts);
+    }
+
+    if (elevResult.status === 'rejected') {
+      renderSectionError(elevChart, 'Error al cargar la elevación');
+    } else {
+      renderElevationChart(elevPts, weatherPts);
+    }
   }
 
   btnAnalyze.disabled = false;
@@ -1606,6 +1680,13 @@ async function analyzeRoute() {
 btnAnalyze.addEventListener('click', analyzeRoute);
 
 // ── Render results ─────────────────────────────────────────────────────────
+
+function renderSectionError(container, msg) {
+  const p = document.createElement('p');
+  p.style.cssText = 'margin:8px;font-size:11px;color:var(--muted);font-family:var(--sans);';
+  p.textContent = msg;
+  container.appendChild(p);
+}
 
 function renderRiskResults(segs) {
   riskList.innerHTML = '';
