@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -480,4 +481,164 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// ── Photon types ────────────────────────────────────────────────────────────
+
+type photonFeature struct {
+	Geometry struct {
+		Coordinates [2]float64 `json:"coordinates"` // [lon, lat]
+	} `json:"geometry"`
+	Properties struct {
+		Name        string `json:"name"`
+		Street      string `json:"street"`
+		Housenumber string `json:"housenumber"`
+		City        string `json:"city"`
+		State       string `json:"state"`
+		CountryCode string `json:"countrycode"`
+	} `json:"properties"`
+}
+
+type photonResponse struct {
+	Features []photonFeature `json:"features"`
+}
+
+type geocodeCandidate struct {
+	Address string  `json:"address"`
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+}
+
+func formatPhotonAddress(f photonFeature) string {
+	p := f.Properties
+	var parts []string
+	if p.Name != "" {
+		// Named POI or place: name + city (street adds noise)
+		parts = append(parts, p.Name)
+	} else {
+		// Unnamed address: street + housenumber
+		street := p.Street
+		if p.Housenumber != "" && street != "" {
+			street = street + " " + p.Housenumber
+		}
+		if street != "" {
+			parts = append(parts, street)
+		}
+	}
+	if p.City != "" {
+		parts = append(parts, p.City)
+	} else if p.State != "" {
+		parts = append(parts, p.State)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func callPhoton(ctx context.Context, url string) (*photonResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "motorisk/1.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result photonResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ── Handlers ─────────────────────────────────────────────────────────────────
+
+func (s *Server) handleGeocode(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Q     string `json:"q"`
+		Limit int    `json:"limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "body inválido", http.StatusBadRequest)
+		return
+	}
+	if body.Limit <= 0 {
+		body.Limit = 6
+	}
+
+	url := fmt.Sprintf(
+		"https://photon.komoot.io/api/?q=%s&limit=%d&bbox=-18.2,27.6,4.4,43.8",
+		strings.ReplaceAll(body.Q, " ", "+"), body.Limit,
+	)
+
+	cacheKey := CacheKey("geocode", []byte(url))
+	if cached, ok := s.cache.Get(cacheKey); ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(cached)
+		return
+	}
+
+	photon, err := callPhoton(r.Context(), url)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
+		http.Error(w, "error consultando Photon", http.StatusBadGateway)
+		return
+	}
+
+	candidates := make([]geocodeCandidate, 0, len(photon.Features))
+	for _, f := range photon.Features {
+		if f.Properties.CountryCode != "ES" {
+			continue
+		}
+		addr := formatPhotonAddress(f)
+		if addr == "" {
+			continue
+		}
+		candidates = append(candidates, geocodeCandidate{
+			Address: addr,
+			Lat:     f.Geometry.Coordinates[1],
+			Lon:     f.Geometry.Coordinates[0],
+		})
+	}
+
+	encoded, err := json.Marshal(candidates)
+	if err != nil {
+		http.Error(w, "error serializando respuesta", http.StatusInternalServerError)
+		return
+	}
+	s.cache.Set(cacheKey, encoded, 5*time.Minute)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(encoded)
+}
+
+func (s *Server) handleReverse(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Lat float64 `json:"lat"`
+		Lon float64 `json:"lon"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "body inválido", http.StatusBadRequest)
+		return
+	}
+
+	url := fmt.Sprintf("https://photon.komoot.io/reverse?lat=%f&lon=%f", body.Lat, body.Lon)
+
+	photon, err := callPhoton(r.Context(), url)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
+		http.Error(w, "error consultando Photon", http.StatusBadGateway)
+		return
+	}
+
+	address := ""
+	if len(photon.Features) > 0 {
+		address = formatPhotonAddress(photon.Features[0])
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"address": address})
 }

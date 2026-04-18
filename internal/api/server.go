@@ -28,6 +28,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /route/elevation", s.handleElevation)
 	mux.HandleFunc("POST /route/snap", s.handleSnap)
 	mux.HandleFunc("POST /route/geometry", s.handleGeometry)
+	mux.HandleFunc("POST /route/geocode", s.handleGeocode)
+	mux.HandleFunc("POST /route/reverse", s.handleReverse)
 	return corsMiddleware(mux)
 }
 
