@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -100,19 +101,43 @@ func sampleCoords(coords [][2]float64) [][2]float64 {
 	return result
 }
 
+// decodeJSON applies a 1 MiB body limit then decodes JSON into dst.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, "body demasiado grande", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "body inválido", http.StatusBadRequest)
+		}
+		return false
+	}
+	return true
+}
+
+func validLatLon(lat, lon float64) bool {
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
 func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Coordinates [][2]float64 `json:"coordinates"`
 		Date        string       `json:"date,omitempty"`
 		Hour        *int         `json:"hour,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if len(body.Coordinates) < 2 {
 		http.Error(w, "la ruta necesita al menos 2 puntos", http.StatusBadRequest)
 		return
+	}
+	for _, c := range body.Coordinates {
+		if !validLatLon(c[1], c[0]) {
+			http.Error(w, "coordenadas fuera de rango", http.StatusBadRequest)
+			return
+		}
 	}
 	if body.Date != "" {
 		if body.Hour == nil {
@@ -252,13 +277,18 @@ func (s *Server) handleElevation(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Coordinates [][2]float64 `json:"coordinates"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if len(body.Coordinates) < 2 {
 		http.Error(w, "la ruta necesita al menos 2 puntos", http.StatusBadRequest)
 		return
+	}
+	for _, c := range body.Coordinates {
+		if !validLatLon(c[1], c[0]) {
+			http.Error(w, "coordenadas fuera de rango", http.StatusBadRequest)
+			return
+		}
 	}
 
 	coords := body.Coordinates
@@ -386,8 +416,11 @@ func (s *Server) handleSnap(w http.ResponseWriter, r *http.Request) {
 		Lat float64 `json:"lat"`
 		Lon float64 `json:"lon"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !validLatLon(body.Lat, body.Lon) {
+		http.Error(w, "coordenadas fuera de rango", http.StatusBadRequest)
 		return
 	}
 
@@ -431,8 +464,11 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 		From [2]float64 `json:"from"` // [lat, lon]
 		To   [2]float64 `json:"to"`   // [lat, lon]
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !validLatLon(body.From[0], body.From[1]) || !validLatLon(body.To[0], body.To[1]) {
+		http.Error(w, "coordenadas fuera de rango", http.StatusBadRequest)
 		return
 	}
 
@@ -481,15 +517,18 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Coordinates [][2]float64 `json:"coordinates"`
 	}
-
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
 		return
 	}
-
 	if len(body.Coordinates) < 2 {
 		http.Error(w, "la ruta necesita al menos 2 puntos", http.StatusBadRequest)
 		return
+	}
+	for _, c := range body.Coordinates {
+		if !validLatLon(c[1], c[0]) {
+			http.Error(w, "coordenadas fuera de rango", http.StatusBadRequest)
+			return
+		}
 	}
 
 	segments, err := s.queryRoute(r.Context(), body.Coordinates)
@@ -591,8 +630,7 @@ func (s *Server) handleGeocode(w http.ResponseWriter, r *http.Request) {
 		Q     string `json:"q"`
 		Limit int    `json:"limit"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if body.Limit <= 0 {
@@ -652,8 +690,11 @@ func (s *Server) handleReverse(w http.ResponseWriter, r *http.Request) {
 		Lat float64 `json:"lat"`
 		Lon float64 `json:"lon"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body inválido", http.StatusBadRequest)
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !validLatLon(body.Lat, body.Lon) {
+		http.Error(w, "coordenadas fuera de rango", http.StatusBadRequest)
 		return
 	}
 

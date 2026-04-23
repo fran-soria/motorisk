@@ -39,7 +39,12 @@ func main() {
 		log.Fatal("OSRM_URL no definida")
 	}
 
-	srv := api.NewServer(pool, osrmURL)
+	corsOrigin := os.Getenv("CORS_ORIGIN")
+	if corsOrigin == "" {
+		corsOrigin = "*"
+	}
+
+	srv := api.NewServer(pool, osrmURL, corsOrigin)
 
 	log.Printf("Servidor escuchando en :%s", port)
 	if err := http.ListenAndServe(":"+port, srv.Routes()); err != nil {

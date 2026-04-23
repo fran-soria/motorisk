@@ -16,14 +16,16 @@ type Server struct {
 	cache      *Cache
 	osrmURL    string
 	httpClient *http.Client
+	corsOrigin string
 }
 
-func NewServer(db *pgxpool.Pool, osrmURL string) *Server {
+func NewServer(db *pgxpool.Pool, osrmURL, corsOrigin string) *Server {
 	return &Server{
 		db:         db,
 		cache:      NewCache(),
 		osrmURL:    strings.TrimRight(osrmURL, "/"),
 		httpClient: &http.Client{Timeout: 15 * time.Second},
+		corsOrigin: corsOrigin,
 	}
 }
 
@@ -37,12 +39,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /route/geometry", s.handleGeometry)
 	mux.HandleFunc("POST /route/geocode", s.handleGeocode)
 	mux.HandleFunc("POST /route/reverse", s.handleReverse)
-	return corsMiddleware(mux)
+	return s.corsMiddleware(mux)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", s.corsOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {

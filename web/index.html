@@ -4,10 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>motorisk</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
+        crossorigin="anonymous"/>
   <link rel="preconnect" href="https://api.fontshare.com">
   <link href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700,800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
+          crossorigin="anonymous"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1422,6 +1426,7 @@ let _geocodeDebounce    = null;
 let _dragSrcIndex       = null;
 let _circularActive     = false;
 let _circularPreviewCircle  = null;
+let _nextWpId           = 0;
 let _circularPreviewMarker  = null;
 
 // ── Onboarding tutorial ─────────────────────────────────────────────────────
@@ -1764,11 +1769,10 @@ function createMarker(latlng) {
     const i  = waypoints.findIndex(w => w.marker === marker);
     if (i !== -1) {
       if (_circularActive && (i === 0 || i === waypoints.length - 1)) exitCircularMode();
+      const wpId = waypoints[i].id;
       waypoints[i].name = null;
       await moveWaypoint(i, [ll.lat, ll.lng]);
-      reverseGeocode([ll.lat, ll.lng]).then(name => {
-        if (waypoints[i]) { waypoints[i].name = name; renderWaypointList(); updateCircularBtn(); }
-      });
+      reverseGeocode([ll.lat, ll.lng]).then(name => patchWaypointName(wpId, name));
     }
     setTimeout(() => { isDragging = false; }, 50);
     scheduleAnalyze();
@@ -1938,6 +1942,21 @@ function makeSearchBox(isOrigin = false) {
 
   setTimeout(() => { const el = document.getElementById('wp-search-input'); if (el) el.focus(); }, 0);
   return box;
+}
+
+function patchWaypointName(wpId, name) {
+  const wp = waypoints.find(w => w.id === wpId);
+  if (!wp) return;
+  wp.name = name;
+  const idx = waypoints.indexOf(wp);
+  const list = document.getElementById('waypoint-list');
+  const nameEl = list?.querySelector(`[data-index="${idx}"] .wp-name:not(.wp-placeholder-label)`);
+  if (nameEl) {
+    fillNameEl(nameEl, name || formatCoords(wp.latlng));
+  } else {
+    renderWaypointList();
+  }
+  updateCircularBtn();
 }
 
 function renderWaypointList() {
@@ -2174,11 +2193,11 @@ async function reorderWaypoints(fromIndex, toIndex) {
 
   segments.forEach(seg => { if (seg?.layer) map.removeLayer(seg.layer); });
   segments.length = 0;
-
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const result = await fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng);
-    segments.push(buildSegment(result));
-  }
+  (await Promise.all(
+    Array.from({ length: waypoints.length - 1 }, (_, i) =>
+      fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng)
+    )
+  )).forEach(r => segments.push(buildSegment(r)));
 
   updateBottomBar();
   renderWaypointList(); updateCircularBtn();
@@ -2188,7 +2207,7 @@ async function reorderWaypoints(fromIndex, toIndex) {
 async function addWaypoint(latlng) {
   latlng = await snapToRoad(latlng);
   const marker = createMarker(latlng);
-  waypoints.push({ latlng, marker, name: null });
+  waypoints.push({ id: _nextWpId++, latlng, marker, name: null });
   if (waypoints.length === 1) collapseTutorial();
 
   if (waypoints.length > 1) {
@@ -2197,11 +2216,9 @@ async function addWaypoint(latlng) {
     segments.push(buildSegment(result));
   }
 
-  // Reverse geocode non-blocking — update name when it arrives
-  const idx = waypoints.length - 1;
-  reverseGeocode(latlng).then(name => {
-    if (waypoints[idx]) { waypoints[idx].name = name; renderWaypointList(); updateCircularBtn(); }
-  });
+  // Reverse geocode non-blocking — find by stable id, not index, to survive reorder/delete.
+  const wpId = waypoints[waypoints.length - 1].id;
+  reverseGeocode(latlng).then(name => patchWaypointName(wpId, name));
 
   updateBottomBar();
   renderWaypointList(); updateCircularBtn();
@@ -2210,7 +2227,7 @@ async function addWaypoint(latlng) {
 async function addWaypointWithName(latlng, name) {
   latlng = await snapToRoad(latlng);
   const marker = createMarker(latlng);
-  waypoints.push({ latlng, marker, name });
+  waypoints.push({ id: _nextWpId++, latlng, marker, name });
   if (waypoints.length === 1) collapseTutorial();
 
   if (waypoints.length > 1) {
@@ -2298,10 +2315,11 @@ async function moveWaypoint(i, newLatlng, signal) {
 }
 
 async function replaceWaypoint(i, latlng, name) {
+  const wpId = waypoints[i].id;
   map.removeLayer(waypoints[i].marker);
   latlng = await snapToRoad(latlng);
   const marker = createMarker(latlng);
-  waypoints[i] = { latlng, marker, name };
+  waypoints[i] = { id: wpId, latlng, marker, name };
 
   const hasPrev = i > 0;
   const hasNext = i < waypoints.length - 1;
@@ -2328,18 +2346,17 @@ async function replaceWaypoint(i, latlng, name) {
 async function insertWaypoint(position, latlng, name) {
   latlng = await snapToRoad(latlng);
   const marker = createMarker(latlng);
-  waypoints.splice(position, 0, { latlng, marker, name });
+  waypoints.splice(position, 0, { id: _nextWpId++, latlng, marker, name });
   segments.forEach(seg => { if (seg?.layer) map.removeLayer(seg.layer); });
   segments.length = 0;
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const result = await fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng);
-    segments.push(buildSegment(result));
-  }
+  (await Promise.all(
+    Array.from({ length: waypoints.length - 1 }, (_, i) =>
+      fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng)
+    )
+  )).forEach(r => segments.push(buildSegment(r)));
   if (name == null) {
-    const idx = position;
-    reverseGeocode(latlng).then(resolved => {
-      if (waypoints[idx]) { waypoints[idx].name = resolved; renderWaypointList(); updateCircularBtn(); }
-    });
+    const wpId = waypoints[position].id;
+    reverseGeocode(latlng).then(name => patchWaypointName(wpId, name));
   }
   updateBottomBar();
   renderWaypointList(); updateCircularBtn();
@@ -2949,10 +2966,11 @@ async function reverseRoute() {
   waypoints.reverse();
   segments.forEach(seg => { if (seg?.layer) map.removeLayer(seg.layer); });
   segments.length = 0;
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const result = await fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng);
-    segments.push(buildSegment(result));
-  }
+  (await Promise.all(
+    Array.from({ length: waypoints.length - 1 }, (_, i) =>
+      fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng)
+    )
+  )).forEach(r => segments.push(buildSegment(r)));
   updateBottomBar();
   renderWaypointList(); updateCircularBtn();
   scheduleAnalyze();
