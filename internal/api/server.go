@@ -5,19 +5,26 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/fran-soria/motorisk/internal/datex2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Server struct {
-	db      *pgxpool.Pool
-	cache   *Cache
-	osrmURL string
+	db         *pgxpool.Pool
+	cache      *Cache
+	osrmURL    string
+	httpClient *http.Client
 }
 
 func NewServer(db *pgxpool.Pool, osrmURL string) *Server {
-	return &Server{db: db, cache: NewCache(), osrmURL: strings.TrimRight(osrmURL, "/")}
+	return &Server{
+		db:         db,
+		cache:      NewCache(),
+		osrmURL:    strings.TrimRight(osrmURL, "/"),
+		httpClient: &http.Client{Timeout: 15 * time.Second},
+	}
 }
 
 func (s *Server) Routes() http.Handler {

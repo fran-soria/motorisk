@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fran-soria/motorisk/internal/datex2"
 	"github.com/jackc/pgx/v5"
@@ -50,11 +51,13 @@ type osrmResponse struct {
 	} `json:"routes"`
 }
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 func fetchRoadGeometry(osrmURL string, fromLon, fromLat, toLon, toLat float64) (json.RawMessage, error) {
 	url := fmt.Sprintf("%s/route/v1/driving/%f,%f;%f,%f?geometries=geojson&overview=full",
 		osrmURL, fromLon, fromLat, toLon, toLat)
 
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +103,7 @@ func main() {
 		log.Fatalf("error creando tabla: %v", err)
 	}
 
-	resp, err := http.Get(dgtURL)
+	resp, err := httpClient.Get(dgtURL)
 	if err != nil {
 		log.Fatalf("error descargando datos DGT: %v", err)
 	}

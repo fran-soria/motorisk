@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -103,7 +104,7 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Coordinates [][2]float64 `json:"coordinates"`
 		Date        string       `json:"date,omitempty"`
-		Hour        int          `json:"hour,omitempty"`
+		Hour        *int         `json:"hour,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "body inválido", http.StatusBadRequest)
@@ -112,6 +113,16 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	if len(body.Coordinates) < 2 {
 		http.Error(w, "la ruta necesita al menos 2 puntos", http.StatusBadRequest)
 		return
+	}
+	if body.Date != "" {
+		if body.Hour == nil {
+			http.Error(w, "hour es obligatorio cuando se especifica date", http.StatusBadRequest)
+			return
+		}
+		if *body.Hour < 0 || *body.Hour > 23 {
+			http.Error(w, "hour debe estar entre 0 y 23", http.StatusBadRequest)
+			return
+		}
 	}
 
 	pts := sampleCoords(body.Coordinates)
@@ -148,7 +159,7 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error interno", http.StatusInternalServerError)
 		return
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -187,10 +198,16 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 		km := math.Round(routeKms[i]*10) / 10
 		var windSpd, windDir, prec, vis float64
 		if body.Date != "" {
-			windSpd = loc.Hourly.WindSpeed10m[body.Hour]
-			windDir = loc.Hourly.WindDirection10m[body.Hour]
-			prec    = loc.Hourly.Precipitation[body.Hour]
-			vis     = loc.Hourly.Visibility[body.Hour] / 1000
+			h := *body.Hour
+			if h >= len(loc.Hourly.WindSpeed10m) || h >= len(loc.Hourly.WindDirection10m) ||
+				h >= len(loc.Hourly.Precipitation) || h >= len(loc.Hourly.Visibility) {
+				http.Error(w, "Open-Meteo devolvió menos datos de los esperados", http.StatusBadGateway)
+				return
+			}
+			windSpd = loc.Hourly.WindSpeed10m[h]
+			windDir = loc.Hourly.WindDirection10m[h]
+			prec    = loc.Hourly.Precipitation[h]
+			vis     = loc.Hourly.Visibility[h] / 1000
 		} else {
 			windSpd = loc.Current.WindSpeed10m
 			windDir = loc.Current.WindDirection10m
@@ -285,7 +302,7 @@ func (s *Server) handleElevation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error interno", http.StatusInternalServerError)
 		return
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -374,9 +391,17 @@ func (s *Server) handleSnap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := fmt.Sprintf("%s/nearest/v1/driving/%f,%f", s.osrmURL, body.Lon, body.Lat)
-	resp, err := http.Get(url) //nolint:noctx
+	snapURL := fmt.Sprintf("%s/nearest/v1/driving/%f,%f", s.osrmURL, body.Lon, body.Lat)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, snapURL, nil)
 	if err != nil {
+		http.Error(w, "error interno", http.StatusInternalServerError)
+		return
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		http.Error(w, "error consultando OSRM", http.StatusBadGateway)
 		return
 	}
@@ -411,11 +436,19 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := fmt.Sprintf("%s/route/v1/driving/%f,%f;%f,%f?geometries=geojson&overview=full",
+	geometryURL := fmt.Sprintf("%s/route/v1/driving/%f,%f;%f,%f?geometries=geojson&overview=full",
 		s.osrmURL, body.From[1], body.From[0], body.To[1], body.To[0])
 
-	resp, err := http.Get(url) //nolint:noctx
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, geometryURL, nil)
 	if err != nil {
+		http.Error(w, "error interno", http.StatusInternalServerError)
+		return
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		http.Error(w, "error consultando OSRM", http.StatusBadGateway)
 		return
 	}
@@ -533,13 +566,13 @@ func formatPhotonAddress(f photonFeature) string {
 	return strings.Join(parts, ", ")
 }
 
-func callPhoton(ctx context.Context, url string) (*photonResponse, error) {
+func callPhoton(ctx context.Context, client *http.Client, url string) (*photonResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "motorisk/1.0")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -566,19 +599,20 @@ func (s *Server) handleGeocode(w http.ResponseWriter, r *http.Request) {
 		body.Limit = 6
 	}
 
-	url := fmt.Sprintf(
-		"https://photon.komoot.io/api/?q=%s&limit=%d&bbox=-18.2,27.6,4.4,43.8",
-		strings.ReplaceAll(body.Q, " ", "+"), body.Limit,
-	)
+	params := url.Values{}
+	params.Set("q", body.Q)
+	params.Set("limit", fmt.Sprintf("%d", body.Limit))
+	params.Set("bbox", "-18.2,27.6,4.4,43.8")
+	geocodeURL := "https://photon.komoot.io/api/?" + params.Encode()
 
-	cacheKey := CacheKey("geocode", []byte(url))
+	cacheKey := CacheKey("geocode", []byte(geocodeURL))
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(cached)
 		return
 	}
 
-	photon, err := callPhoton(r.Context(), url)
+	photon, err := callPhoton(r.Context(), s.httpClient, geocodeURL)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -625,7 +659,7 @@ func (s *Server) handleReverse(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf("https://photon.komoot.io/reverse?lat=%f&lon=%f", body.Lat, body.Lon)
 
-	photon, err := callPhoton(r.Context(), url)
+	photon, err := callPhoton(r.Context(), s.httpClient, url)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
