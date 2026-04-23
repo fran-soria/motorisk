@@ -124,7 +124,7 @@
     .wp-dot-last    { background: var(--accent-risk); }
     .wp-dot-mid     { background: transparent; border: 1.5px solid var(--muted); }
     .wp-dot-pending { background: transparent; border: 1.5px solid var(--muted); }
-    .wp-add-row { display: flex; align-items: center; height: 20px; margin-top: -12px; margin-bottom: -8px; position: relative; z-index: 2; cursor: pointer; }
+    .wp-add-row { display: flex; align-items: center; height: 20px; max-width: 30px; margin-top: -12px; margin-bottom: -8px; position: relative; z-index: 2; cursor: pointer; }
     .wp-add-row::before { content: ''; position: absolute; inset: -12px 0; }
     .wp-add-row .wp-track { padding-top: 0; height: 20px; justify-content: center; }
     .wp-dot-add { width: 20px; height: 20px; border-radius: 50%; background: transparent; border: 1px dashed var(--border); color: var(--muted); line-height: 20px; display: flex; justify-content: center; align-items: center; flex-shrink: 0; padding: 0; transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.12s cubic-bezier(0.2, 0, 0, 1); }
@@ -146,6 +146,7 @@
       overflow: visible;
       position: relative;
     }
+    .wp-box:hover { background: var(--bg) !important; }
     .wp-drag { cursor: grab; color: var(--muted); font-size: 14px; user-select: none; flex-shrink: 0; line-height: 1; }
     .wp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; font-size: 12px; color: var(--text); }
     .wp-name-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
@@ -227,6 +228,7 @@
       min-width: 0;
       transition: min-width 200ms cubic-bezier(0.4, 0, 0.2, 1);
     }
+    #brand:hover { background: var(--bg) !important; }
 
     /* ── Tutorial ── */
     #brand { position: relative; }
@@ -449,7 +451,7 @@
       align-items: center;
       gap: 6px;
       padding: 7px 16px;
-      background: var(--accent-route);
+      background: var(--accent-risk);
       color: #fff;
       border: none;
       border-radius: 999px;
@@ -856,6 +858,137 @@
       from { transform: scale(0); opacity: 0; }
       to   { transform: scale(1); opacity: 1; }
     }
+
+    /* ── Route actions panel ── */
+    #route-actions {
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+      max-width: 220px;
+      padding-left: 22px;
+      align-items: stretch;
+    }
+    #route-features {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      gap: 4px;
+    }
+    .route-feature-btn {
+      flex: 1;
+      min-width: 52px;
+      font-size: 10px;
+      font-weight: 500;
+      font-family: var(--sans);
+      padding: 4px 6px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: default;
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      opacity: 0.4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      line-height: 1.3;
+      text-align: center;
+      position: relative;
+    }
+    .route-feature-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(-50% + 3px);
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 10px;
+      font-weight: 500;
+      white-space: nowrap;
+      padding: 3px 7px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s, transform 0.15s cubic-bezier(0.2, 0, 0, 1);
+    }
+    .route-feature-btn:not(:disabled) {
+      opacity: 1;
+      cursor: pointer;
+    }
+    .route-feature-btn:hover { background: var(--bg); }
+    .route-feature-btn:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    #route-actions {
+      position: relative;
+    }
+    #btn-circular:hover { color: var(--text); }
+    #btn-circular.active {
+      background: var(--accent-route);
+      color: var(--bg);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #btn-circular.active svg { animation: spin 8s linear infinite; }
+    #btn-circular.active:hover { background: var(--text); }
+    #gpx-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    #btn-import-gpx, #btn-export-gpx {
+      flex: 1;
+      font-size: 10px;
+      font-weight: 500;
+      padding: 4px 6px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      transition: opacity 0.15s, transform 0.12s cubic-bezier(0.2, 0, 0, 1);
+      font-family: var(--sans);
+      text-align: center;
+      line-height: 1.3;
+      position: relative;
+    }
+    #btn-import-gpx::after, #btn-export-gpx::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: 50%;
+      left: calc(100% + 6px);
+      transform: translateY(-50%) translateX(-4px);
+      background: var(--surface);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      border: 0.5px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 10px;
+      font-weight: 500;
+      white-space: nowrap;
+      padding: 3px 7px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s, transform 0.15s cubic-bezier(0.2, 0, 0, 1);
+    }
+    #btn-import-gpx:hover::after, #btn-export-gpx:hover::after {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
+    #btn-import-gpx:hover, #btn-export-gpx:hover { background: var(--bg) !important; }
+    #btn-import-gpx:active, #btn-export-gpx:active { transform: scale(0.96); }
+    #btn-export-gpx { opacity: 0.35; cursor: default; pointer-events: none; }
+    #btn-export-gpx.ready { opacity: 1; cursor: pointer; pointer-events: auto; }
   </style>
 </head>
 <body>
@@ -883,6 +1016,18 @@
   </button>
   </div>
   <div id="waypoint-list"></div>
+  <div id="route-actions">
+    <div id="route-features">
+      <button class="route-feature-btn" disabled data-tooltip="Próximamente"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-spline-icon lucide-spline"><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><path d="M5 17A12 12 0 0 1 17 5"/></svg></button>
+      <button class="route-feature-btn" data-tooltip="Ruta circular" id="btn-circular"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+      <button class="route-feature-btn" disabled data-tooltip="Invertir ruta" id="btn-reverse"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right-left-icon lucide-arrow-right-left"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>
+    </div>
+    <div id="gpx-stack">
+      <button id="btn-import-gpx" data-tooltip="Importar GPX"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-import-icon lucide-import"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/></svg></button>
+      <button id="btn-export-gpx" disabled data-tooltip="Exportar GPX"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-arrow-right-exit-icon lucide-square-arrow-right-exit"><path d="M10 12h11"/><path d="m17 16 4-4-4-4"/><path d="M21 6.344V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-1.344"/></svg></button>
+      <input type="file" id="gpx-file-input" accept=".gpx" style="display:none">
+    </div>
+  </div>
 </div>
 <div id="theme-popover" class="float"></div>
 
@@ -1174,6 +1319,9 @@ const bottomBar      = document.getElementById('bottom-bar');
 const chipInfo       = document.getElementById('chip-info');
 const btnAnalyze     = document.getElementById('btn-analyze');
 const btnClear       = document.getElementById('btn-clear');
+const btnExportGPX   = document.getElementById('btn-export-gpx');
+const btnReverse     = document.getElementById('btn-reverse');
+const gpxFileInput   = document.getElementById('gpx-file-input');
 const resultsPanel   = document.getElementById('results-panel');
 const btnClosePanel  = document.getElementById('btn-close-panel');
 const themePopover   = document.getElementById('theme-popover');
@@ -1232,6 +1380,25 @@ const _initHour = new Date().getHours();
 document.getElementById('hour-slider').value = _initHour;
 document.getElementById('hour-label').textContent = String(_initHour).padStart(2, '0') + ':00';
 
+// ── Geometry utilities ─────────────────────────────────────────────────────
+
+function bearingTo(from, to) {
+  const φ1 = from[0] * Math.PI / 180, φ2 = to[0] * Math.PI / 180;
+  const Δλ = (to[1] - from[1]) * Math.PI / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function destinationPoint(from, distKm, bearing) {
+  const R = 6371, d = distKm / R;
+  const φ1 = from[0] * Math.PI / 180, λ1 = from[1] * Math.PI / 180;
+  const b  = bearing * Math.PI / 180;
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(b));
+  const λ2 = λ1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2));
+  return [φ2 * 180 / Math.PI, λ2 * 180 / Math.PI];
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 // waypoints[i] = { latlng: [lat, lng], marker, name }
@@ -1253,6 +1420,9 @@ let _pendingSlot        = null;   // null = closed, number = slot index with sea
 let _insertSlot         = null;   // null = no insert mode, number = insert position
 let _geocodeDebounce    = null;
 let _dragSrcIndex       = null;
+let _circularActive     = false;
+let _circularPreviewCircle  = null;
+let _circularPreviewMarker  = null;
 
 // ── Onboarding tutorial ─────────────────────────────────────────────────────
 const tutorialBrandEl    = document.getElementById('brand');
@@ -1283,7 +1453,7 @@ function collapseTutorial() {
 }
 
 expandTutorial();
-renderWaypointList();
+renderWaypointList(); updateCircularBtn();
 
 tutorialBrandEl.addEventListener('click', () => {
   if (tutorialExpanded) collapseTutorial();
@@ -1483,8 +1653,12 @@ function updateBottomBar() {
 
   if (getRouteCoordinates().length >= 2) {
     btnAnalyze.classList.add('ready');
+    btnExportGPX.classList.add('ready');
+    btnExportGPX.disabled = false;
   } else {
     btnAnalyze.classList.remove('ready');
+    btnExportGPX.classList.remove('ready');
+    btnExportGPX.disabled = true;
   }
 }
 
@@ -1589,10 +1763,11 @@ function createMarker(latlng) {
     const ll = e.target.getLatLng();
     const i  = waypoints.findIndex(w => w.marker === marker);
     if (i !== -1) {
+      if (_circularActive && (i === 0 || i === waypoints.length - 1)) exitCircularMode();
       waypoints[i].name = null;
       await moveWaypoint(i, [ll.lat, ll.lng]);
       reverseGeocode([ll.lat, ll.lng]).then(name => {
-        if (waypoints[i]) { waypoints[i].name = name; renderWaypointList(); }
+        if (waypoints[i]) { waypoints[i].name = name; renderWaypointList(); updateCircularBtn(); }
       });
     }
     setTimeout(() => { isDragging = false; }, 50);
@@ -1871,7 +2046,7 @@ function renderWaypointList() {
         const insertBox = makeSearchBox(false);
         insertItem.append(insertTrack, insertBox);
         list.appendChild(insertItem);
-      } else if (showAddDots) {
+      } else if (showAddDots && !(_circularActive && i === waypoints.length - 1)) {
         // + dot row
         const insertPos = i + 1;
         const addRow = document.createElement('div');
@@ -1894,14 +2069,14 @@ function renderWaypointList() {
 function openSearch(slotIndex) {
   if (waypoints.length >= 10) return;
   _pendingSlot = slotIndex ?? waypoints.length;
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 function openInsert(position) {
   if (waypoints.length >= 10) return;
   _insertSlot  = position;
   _pendingSlot = null;
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 function cancelSearch() {
@@ -1909,7 +2084,7 @@ function cancelSearch() {
   if (dd && dd.matches(':hover')) return;
   _pendingSlot = null;
   _insertSlot  = null;
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 function closeDropdown() {
@@ -1964,7 +2139,7 @@ async function selectCandidate(candidate) {
   _pendingSlot = null;
   _insertSlot  = null;
   closeDropdown();
-  if (candidate.lat == null) { renderWaypointList(); return; }
+  if (candidate.lat == null) { renderWaypointList(); updateCircularBtn(); return; }
   const latlng = [candidate.lat, candidate.lon];
   const name   = candidate.address || formatCoords(latlng);
   let nextSlot;
@@ -1990,6 +2165,10 @@ async function selectCandidate(candidate) {
 
 async function reorderWaypoints(fromIndex, toIndex) {
   _insertSlot = null;
+  const last = waypoints.length - 1;
+  if (_circularActive && (fromIndex === 0 || fromIndex === last || toIndex === 0 || toIndex === last)) {
+    exitCircularMode();
+  }
   const [wp] = waypoints.splice(fromIndex, 1);
   waypoints.splice(toIndex, 0, wp);
 
@@ -2002,7 +2181,7 @@ async function reorderWaypoints(fromIndex, toIndex) {
   }
 
   updateBottomBar();
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
   scheduleAnalyze();
 }
 
@@ -2021,11 +2200,11 @@ async function addWaypoint(latlng) {
   // Reverse geocode non-blocking — update name when it arrives
   const idx = waypoints.length - 1;
   reverseGeocode(latlng).then(name => {
-    if (waypoints[idx]) { waypoints[idx].name = name; renderWaypointList(); }
+    if (waypoints[idx]) { waypoints[idx].name = name; renderWaypointList(); updateCircularBtn(); }
   });
 
   updateBottomBar();
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 async function addWaypointWithName(latlng, name) {
@@ -2041,7 +2220,7 @@ async function addWaypointWithName(latlng, name) {
   }
 
   updateBottomBar();
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 async function deleteWaypoint(i) {
@@ -2064,6 +2243,11 @@ async function deleteWaypoint(i) {
     segments.splice(j, 1);
   }
 
+  const wasFirstOrLastWaypoint = _circularActive
+    && (i === waypoints.length - 1 || i === 0)
+    && waypoints[0].latlng[0] === waypoints[i].latlng[0]
+    && waypoints[0].latlng[1] === waypoints[i].latlng[1];
+
   waypoints.splice(i, 1);
   // Reconnect neighbors with a new segment
   if (hasPrev && hasNext) {
@@ -2071,8 +2255,10 @@ async function deleteWaypoint(i) {
     segments.splice(i - 1, 0, buildSegment(result));
   }
 
+  if (wasFirstOrLastWaypoint) _circularActive = false;
+
   updateBottomBar();
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 async function moveWaypoint(i, newLatlng, signal) {
@@ -2104,7 +2290,7 @@ async function moveWaypoint(i, newLatlng, signal) {
     }
 
     updateBottomBar();
-    renderWaypointList();
+    renderWaypointList(); updateCircularBtn();
   } catch (err) {
     if (err.name !== 'AbortError') throw err;
     // Aborted by a newer drag update — ignore
@@ -2136,7 +2322,7 @@ async function replaceWaypoint(i, latlng, name) {
   if (hasNext) segments[i] = buildSegment(nextResult);
 
   updateBottomBar();
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
 
 async function insertWaypoint(position, latlng, name) {
@@ -2149,8 +2335,14 @@ async function insertWaypoint(position, latlng, name) {
     const result = await fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng);
     segments.push(buildSegment(result));
   }
+  if (name == null) {
+    const idx = position;
+    reverseGeocode(latlng).then(resolved => {
+      if (waypoints[idx]) { waypoints[idx].name = resolved; renderWaypointList(); updateCircularBtn(); }
+    });
+  }
   updateBottomBar();
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
   scheduleAnalyze();
 }
 
@@ -2161,7 +2353,12 @@ map.on('click', async (e) => {
   if (_pendingSlot !== null || _insertSlot !== null) { cancelSearch(); return; }
   if (waypoints.length >= 10) return;
   const { lat, lng } = e.latlng;
-  await addWaypoint([lat, lng]);
+  if (_circularActive) {
+    // Insert before the closing origin to keep the loop closed
+    await insertWaypoint(waypoints.length - 1, [lat, lng], null);
+  } else {
+    await addWaypoint([lat, lng]);
+  }
   scheduleAnalyze();
 });
 
@@ -2553,6 +2750,7 @@ function clearResults() {
 // ── Clear ──────────────────────────────────────────────────────────────────
 
 function clearAll() {
+  exitCircularMode();
   waypoints.forEach(w => map.removeLayer(w.marker));
   segments.forEach(s => { if (s) map.removeLayer(s.layer); });
   waypoints = [];
@@ -2562,6 +2760,8 @@ function clearAll() {
   document.body.classList.remove('panel-open');
   bottomBar.classList.remove('visible');
   btnAnalyze.classList.remove('ready');
+  btnExportGPX.classList.remove('ready');
+  btnExportGPX.disabled = true;
   selectedDate = new Date();
   selectedHour = new Date().getHours();
   isNow        = true;
@@ -2570,8 +2770,75 @@ function clearAll() {
   document.getElementById('hour-label').textContent =
     String(selectedHour).padStart(2, '0') + ':00';
   document.getElementById('settings-panel').classList.remove('open');
-  renderWaypointList();
+  renderWaypointList(); updateCircularBtn();
 }
+
+// ── GPX export ────────────────────────────────────────────────────────────
+
+function escapeXml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function exportGPX() {
+  const coords = getRouteCoordinates();
+  const date = new Date().toISOString().slice(0, 10);
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="motorisk.app" xmlns="http://www.topografix.com/GPX/1/1">`;
+  for (const wp of waypoints) {
+    const [lat, lon] = wp.latlng;
+    const nameTag = wp.name ? `<name>${escapeXml(wp.name)}</name>` : '';
+    xml += `\n  <wpt lat="${lat}" lon="${lon}">${nameTag}</wpt>`;
+  }
+  xml += `\n  <trk><name>motorisk route</name><trkseg>`;
+  for (const [lng, lat] of coords) {
+    xml += `\n    <trkpt lat="${lat}" lon="${lng}"/>`;
+  }
+  xml += `\n  </trkseg></trk>\n</gpx>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([xml], { type: 'application/gpx+xml' }));
+  a.download = `motorisk-${date}.gpx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── GPX import ────────────────────────────────────────────────────────────
+
+async function importGPX(file) {
+  const text = await file.text();
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) {
+    showBottomBarError('Fichero GPX no válido'); return;
+  }
+
+  const wptEls = Array.from(doc.getElementsByTagName('wpt'));
+  const pts = [];
+
+  for (const el of wptEls) {
+    const lat = parseFloat(el.getAttribute('lat'));
+    const lon = parseFloat(el.getAttribute('lon'));
+    if (isNaN(lat) || isNaN(lon)) continue;
+    const nameEl = el.getElementsByTagName('name')[0];
+    pts.push({ latlng: [lat, lon], name: nameEl ? nameEl.textContent.trim() || null : null });
+  }
+
+  if (pts.length === 0) {
+    const trkpts = Array.from(doc.getElementsByTagName('trkpt'));
+    if (trkpts.length === 0) { showBottomBarError('No se encontraron waypoints en el GPX'); return; }
+    const parsePt = el => [parseFloat(el.getAttribute('lat')), parseFloat(el.getAttribute('lon'))];
+    pts.push({ latlng: parsePt(trkpts[0]), name: null });
+    if (trkpts.length > 1) pts.push({ latlng: parsePt(trkpts[trkpts.length - 1]), name: null });
+  }
+
+  clearAll();
+  for (const pt of pts) {
+    await addWaypointWithName(pt.latlng, pt.name);
+  }
+}
+
+document.getElementById('btn-import-gpx').addEventListener('click', () => gpxFileInput.click());
+gpxFileInput.addEventListener('change', e => {
+  if (e.target.files[0]) { importGPX(e.target.files[0]); e.target.value = ''; }
+});
+btnExportGPX.addEventListener('click', exportGPX);
 
 const EYE_OPEN = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 
@@ -2625,6 +2892,73 @@ btnTheme.addEventListener('click', (e) => {
 });
 themePopover.addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => themePopover.classList.remove('open'));
+
+// ── Ruta circular ─────────────────────────────────────────────────────────
+
+function isRouteAlreadyCircular() {
+  return waypoints.length >= 2
+    && waypoints[0].latlng[0] === waypoints[waypoints.length - 1].latlng[0]
+    && waypoints[0].latlng[1] === waypoints[waypoints.length - 1].latlng[1];
+}
+
+function updateCircularBtn() {
+  const btn = document.getElementById('btn-circular');
+  if (!btn) return;
+  if (_circularActive) {
+    if (waypoints.length >= 10) { exitCircularMode(); return; }
+    btn.disabled = false;
+    btn.classList.add('active');
+  } else {
+    // Allow re-entry if closing waypoint is already present; only block if too few or too many
+    const canEnter = waypoints.length < 10 && (isRouteAlreadyCircular() || waypoints.length >= 1);
+    btn.disabled = !canEnter;
+    btn.classList.remove('active');
+  }
+  btnReverse.disabled = waypoints.length < 2;
+}
+
+async function enterCircularMode() {
+  if (!isRouteAlreadyCircular()) {
+    const origin = waypoints[0];
+    await addWaypointWithName(origin.latlng, origin.name);
+  }
+
+  _circularActive = true;
+  renderWaypointList(); updateCircularBtn();
+  scheduleAnalyze();
+}
+
+function exitCircularMode() {
+  if (!_circularActive) return;
+
+  _circularActive = false;
+  renderWaypointList(); updateCircularBtn();
+}
+
+document.getElementById('btn-circular').addEventListener('click', (e) => {
+  if (_circularActive) {
+    exitCircularMode();
+  } else if (!e.currentTarget.disabled) {
+    enterCircularMode();
+  }
+});
+
+// ── Invertir ruta ───────────────────────────────────────────────────────────
+
+async function reverseRoute() {
+  waypoints.reverse();
+  segments.forEach(seg => { if (seg?.layer) map.removeLayer(seg.layer); });
+  segments.length = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const result = await fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng);
+    segments.push(buildSegment(result));
+  }
+  updateBottomBar();
+  renderWaypointList(); updateCircularBtn();
+  scheduleAnalyze();
+}
+
+btnReverse.addEventListener('click', reverseRoute);
 </script>
 </body>
 </html>
