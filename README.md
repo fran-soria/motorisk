@@ -12,21 +12,19 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 
 | Risk segments | Weather forecast |
 |---|---|
-| ![Risk segments](screenshots/tramos-riesgo.png) | ![Weather forecast](screenshots/condiciones-meteo.png) |
+| ![Risk segments](screenshots/risk.png) | ![Weather forecast](screenshots/weather.png) |
 
 | Elevation profile | Route builder |
 |---|---|
-| <!-- screenshot: perfil de elevación con el gráfico interactivo visible --> | <!-- screenshot: panel lateral con waypoints, búsqueda abierta o parada intermedia --> |
-
-| Circular mode | Themes |
-|---|---|
-| <!-- screenshot: ruta en bucle con el botón de modo circular activo --> | <!-- screenshot: comparativa o collage de temas claro/oscuro --> |
+| ![Elevation profile](screenshots/elevation.png) | ![Themes](screenshots/themes.png) |
 
 ## What it does
 
 **Risk segments** ingest DGT's official DATEX2 feed of high-risk motorcycle segments and store them in PostGIS. When you submit a route, a spatial intersection query (`ST_Intersects`) returns every flagged segment your route crosses, with road badge, province, and kilometrage.
 
 **Real road geometry** snaps routes to actual roads via a self-hosted OSRM instance built from OpenStreetMap data covering mainland Spain and the Canary Islands, merged into a single routing graph. Waypoints snap to the nearest road on click. No straight lines between clicks.
+
+**Route modes** let you bias each segment's geometry between speed and curvature. *Fast* uses OSRM's default driving profile, motorways included. *Balanced* and *Curvy* both exclude motorways and ask OSRM for three alternatives: *Balanced* picks the route with the best curvature-per-kilometre ratio (sinuous without taking the long way round), while *Curvy* picks the most sinuous one regardless of extra distance. Curvature is scored on the server as the sum of bearing deltas along the geometry, normalised by route length. If no non-motorway route exists, the request falls back to the direct one.
 
 **Weather** samples the route at 50 km intervals and queries Open-Meteo for wind speed, precipitation, and visibility at each point. Supports forecast lookup up to 7 days ahead with per-hour resolution. Alert conditions (wind > 50 km/h, precipitation > 0.5 mm, visibility < 1 km) are flagged on both the map and the elevation profile.
 
@@ -229,6 +227,8 @@ Ver sección Screenshots más arriba.
 **Tramos de riesgo** ingesta el feed DATEX2 oficial de la DGT de tramos de elevado riesgo para motocicletas y los almacena en PostGIS. Al enviar una ruta, una query de intersección espacial devuelve cada tramo señalizado que cruza tu ruta, con el nombre de la carretera, la provincia y el punto kilométrico.
 
 **Geometría real de carretera** ajusta las rutas a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium. Los waypoints se snapean a la carretera más cercana al hacer click. OSRM no está expuesto públicamente; el backend actúa como proxy.
+
+**Modos de ruta** permiten elegir el compromiso entre rapidez y curvatura para cada segmento. *Rápida* usa el perfil de conducción por defecto de OSRM, autopistas incluidas. *Equilibrada* y *Curvas* excluyen autopista y piden tres alternativas a OSRM: *Equilibrada* se queda con la de mejor ratio curvatura/kilómetro (sinuosa sin alargarse de más), mientras que *Curvas* elige la más sinuosa en absoluto, independientemente de la distancia extra. La curvatura se calcula en el servidor como la suma de variaciones de rumbo a lo largo de la geometría, normalizada por la longitud de la ruta. Si no existe alternativa sin autopista, se cae a la ruta directa.
 
 **Construcción de rutas** funciona punto a punto: cada waypoint puede añadirse haciendo click en el mapa o buscando un lugar por nombre mediante geocodificación con Photon. Los waypoints se pueden reordenar arrastrando, borrar individualmente, o editar para insertar una parada intermedia, hasta un máximo de 10 por ruta. El modo circular cierra la ruta sobre el punto de origen. El botón de invertir reconstruye todos los segmentos en paralelo.
 
