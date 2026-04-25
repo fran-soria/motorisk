@@ -152,7 +152,7 @@
     }
     .wp-box:hover { background: var(--bg) !important; }
     .wp-drag { cursor: grab; color: var(--muted); font-size: 14px; user-select: none; flex-shrink: 0; line-height: 1; }
-    .wp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; font-size: 12px; color: var(--text); }
+    .wp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; font-size: 12px; color: var(--text); text-transform: capitalize; }
     .wp-name-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
     .wp-name-sub  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--muted); line-height: 1.3; }
     .wp-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; line-height: 1; }
@@ -826,6 +826,7 @@
     }
 
     .weather-row span { color: var(--text); }
+    .weather-row span.risk { color: var(--accent-risk); }
 
     .wind-arrow {
       display: inline-block;
@@ -989,10 +990,10 @@
       opacity: 1;
       transform: translateY(-50%) translateX(0);
     }
-    #btn-import-gpx:hover, #btn-export-gpx:hover { background: var(--bg) !important; }
+    #btn-import-gpx:hover, #btn-export-gpx:not(:disabled):hover { background: var(--bg) !important; }
     #btn-import-gpx:active, #btn-export-gpx:active { transform: scale(0.96); }
-    #btn-export-gpx { opacity: 0.35; cursor: default; pointer-events: none; }
-    #btn-export-gpx.ready { opacity: 1; cursor: pointer; pointer-events: auto; }
+    #btn-export-gpx { opacity: 0.35; cursor: default; }
+    #btn-export-gpx.ready { opacity: 1; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -1141,36 +1142,6 @@ const API  = window.MOTORISK_CONFIG?.API_URL  ?? 'http://localhost:8080';
 // ── Themes ─────────────────────────────────────────────────────────────────
 
 const THEMES = {
-  // Suzuki blue/white 1986 livery — blue surface glass on light bg
-  suzukiGSXR: {
-    name: 'Suzuki GSX-R750',
-    abbr: 'GSXR',
-    year: '1986',
-    mode: 'light',
-    tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    bg: '#edf0f8',
-    surface: 'rgba(26,58,138,0.10)',
-    text: '#080c1a',
-    muted: '#4a5880',
-    border: 'rgba(26,58,138,0.14)',
-    risk: '#cc1a00',
-    route: '#1a3a8a',
-  },
-  // Honda CB750 — candy chrome gold, warm ivory bg
-  hondaCB750: {
-    name: 'Honda CB750',
-    abbr: 'CB750',
-    year: '1969',
-    mode: 'light',
-    tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    bg: '#f7f3e8',
-    surface: 'rgba(139,105,20,0.12)',
-    text: '#141008',
-    muted: '#7a6030',
-    border: 'rgba(139,105,20,0.16)',
-    risk: '#9B1C1C',
-    route: '#8b6914',
-  },
   // BMW M colors — blue dominant, M red accent, clean white bg
   bmwM1000RR: {
     name: 'BMW M1000RR',
@@ -1186,35 +1157,20 @@ const THEMES = {
     risk: '#E22718',
     route: '#0066B1',
   },  
-  // Arancio Laverda — signature Italian orange, warm dark bg
-  laverda750SF: {
-    name: 'Laverda 750 SF',
-    abbr: 'L750',
+  // Honda CB750 — candy chrome gold, warm ivory bg
+  hondaCB750: {
+    name: 'Honda CB750',
+    abbr: 'CB750',
     year: '1969',
-    mode: 'dark',
-    tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    bg: '#0f0800',
-    surface: 'rgba(244,121,32,0.18)',
-    text: '#faeee0',
-    muted: '#c28c58',
-    border: 'rgba(244,121,32,0.22)',
-    risk: '#c0392b',
-    route: '#F47920',
-  },
-  // Rosso Corsa body, oro Marchesini wheels — deep red-black bg, red surface glass
-  ducati916: {
-    name: 'Ducati 916',
-    abbr: 'D916',
-    year: '1994',
-    mode: 'dark',
-    tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    bg: '#0e0900',
-    surface: 'rgba(212,0,0,0.18)',
-    text: '#f5edd8',
-    muted: '#c06868',
-    border: 'rgba(212,0,0,0.20)',
-    risk: '#C8A040',
-    route: '#D40000',
+    mode: 'light',
+    tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    bg: '#f7f3e8',
+    surface: 'rgba(139,105,20,0.12)',
+    text: '#141008',
+    muted: '#7a6030',
+    border: 'rgba(139,105,20,0.16)',
+    risk: '#9B1C1C',
+    route: '#8b6914',
   },
   // Kawasaki lime green — dark green-black bg, green surface glass
   kawasakiH2R: {
@@ -1231,11 +1187,26 @@ const THEMES = {
     risk: '#d40000',
     route: '#4B9E00',
   },
+  // Arancio Laverda — signature Italian orange, warm dark bg
+  laverda750SF: {
+    name: 'Laverda 750 SF',
+    abbr: 'L750',
+    year: '1969',
+    mode: 'dark',
+    tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    bg: '#0f0800',
+    surface: 'rgba(244,121,32,0.18)',
+    text: '#faeee0',
+    muted: '#c28c58',
+    border: 'rgba(244,121,32,0.22)',
+    risk: '#c0392b',
+    route: '#F47920',
+  },
 
 };
 
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-const defaultTheme = systemDark ? 'laverda750SF' : 'suzukiGSXR';
+const defaultTheme = systemDark ? 'kawasakiH2R' : 'bmwM1000RR';
 let currentThemeKey = localStorage.getItem('moto-risk-theme') || defaultTheme;
 
 function applyThemeCSSVars(theme) {
@@ -1338,8 +1309,8 @@ const btnToggleWeather = document.getElementById('btn-toggle-weather');
 
 // Build theme popover
 (function buildPopover() {
-  const darkKeys  = ['laverda750SF', 'ducati916', 'kawasakiH2R'];
-  const lightKeys = ['suzukiGSXR', 'hondaCB750', 'bmwM1000RR'];
+  const darkKeys  = ['kawasakiH2R', 'laverda750SF'];
+  const lightKeys = ['bmwM1000RR', 'hondaCB750'];
 
   function makeOption(key) {
     const t   = THEMES[key];
@@ -1458,7 +1429,7 @@ function collapseTutorial() {
 }
 
 expandTutorial();
-renderWaypointList(); updateCircularBtn();
+refreshUI();
 
 tutorialBrandEl.addEventListener('click', () => {
   if (tutorialExpanded) collapseTutorial();
@@ -1949,6 +1920,9 @@ function patchWaypointName(wpId, name) {
   if (!wp) return;
   wp.name = name;
   const idx = waypoints.indexOf(wp);
+  // If this slot is currently showing a search box, the name is stored and will
+  // render correctly when the search closes — don't destroy the active input.
+  if (_pendingSlot === idx) { updateCircularBtn(); return; }
   const list = document.getElementById('waypoint-list');
   const nameEl = list?.querySelector(`[data-index="${idx}"] .wp-name:not(.wp-placeholder-label)`);
   if (nameEl) {
@@ -1956,6 +1930,12 @@ function patchWaypointName(wpId, name) {
   } else {
     renderWaypointList();
   }
+  updateCircularBtn();
+}
+
+function refreshUI() {
+  updateBottomBar();
+  renderWaypointList();
   updateCircularBtn();
 }
 
@@ -2088,14 +2068,14 @@ function renderWaypointList() {
 function openSearch(slotIndex) {
   if (waypoints.length >= 10) return;
   _pendingSlot = slotIndex ?? waypoints.length;
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 function openInsert(position) {
   if (waypoints.length >= 10) return;
   _insertSlot  = position;
   _pendingSlot = null;
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 function cancelSearch() {
@@ -2103,7 +2083,7 @@ function cancelSearch() {
   if (dd && dd.matches(':hover')) return;
   _pendingSlot = null;
   _insertSlot  = null;
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 function closeDropdown() {
@@ -2158,7 +2138,7 @@ async function selectCandidate(candidate) {
   _pendingSlot = null;
   _insertSlot  = null;
   closeDropdown();
-  if (candidate.lat == null) { renderWaypointList(); updateCircularBtn(); return; }
+  if (candidate.lat == null) { refreshUI(); return; }
   const latlng = [candidate.lat, candidate.lon];
   const name   = candidate.address || formatCoords(latlng);
   let nextSlot;
@@ -2199,8 +2179,7 @@ async function reorderWaypoints(fromIndex, toIndex) {
     )
   )).forEach(r => segments.push(buildSegment(r)));
 
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
   scheduleAnalyze();
 }
 
@@ -2220,8 +2199,7 @@ async function addWaypoint(latlng) {
   const wpId = waypoints[waypoints.length - 1].id;
   reverseGeocode(latlng).then(name => patchWaypointName(wpId, name));
 
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 async function addWaypointWithName(latlng, name) {
@@ -2236,8 +2214,7 @@ async function addWaypointWithName(latlng, name) {
     segments.push(buildSegment(result));
   }
 
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 async function deleteWaypoint(i) {
@@ -2274,8 +2251,7 @@ async function deleteWaypoint(i) {
 
   if (wasFirstOrLastWaypoint) _circularActive = false;
 
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 async function moveWaypoint(i, newLatlng, signal) {
@@ -2306,8 +2282,7 @@ async function moveWaypoint(i, newLatlng, signal) {
       segments[i] = buildSegment(nextResult);
     }
 
-    updateBottomBar();
-    renderWaypointList(); updateCircularBtn();
+    refreshUI();
   } catch (err) {
     if (err.name !== 'AbortError') throw err;
     // Aborted by a newer drag update — ignore
@@ -2339,8 +2314,7 @@ async function replaceWaypoint(i, latlng, name) {
   if (hasPrev) segments[i - 1] = buildSegment(prevResult);
   if (hasNext) segments[i] = buildSegment(nextResult);
 
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 async function insertWaypoint(position, latlng, name) {
@@ -2358,8 +2332,7 @@ async function insertWaypoint(position, latlng, name) {
     const wpId = waypoints[position].id;
     reverseGeocode(latlng).then(name => patchWaypointName(wpId, name));
   }
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
   scheduleAnalyze();
 }
 
@@ -2624,14 +2597,14 @@ function renderWeatherResults(pts) {
     const routeKm  = (pt.route_km ?? 0).toFixed(1);
     const riskColor = cssVar('--accent-risk');
     const alertDot  = pt.alert ? '<div class="seg-dot" style="margin-top:0;margin-right:4px;display:inline-flex;"><svg width="12" height="12" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div>' : '';
-    const wColor    = pt.wind_speed_kmh   > 50  ? 'color:' + riskColor : '';
-    const pColor    = pt.precipitation_mm > 0.5 ? 'color:' + riskColor : '';
-    const vColor    = pt.visibility_km    < 1.0 ? 'color:' + riskColor : '';
+    const wRisk = pt.wind_speed_kmh   > 50  ? ' class="risk"' : '';
+    const pRisk = pt.precipitation_mm > 0.5 ? ' class="risk"' : '';
+    const vRisk = pt.visibility_km    < 1.0 ? ' class="risk"' : '';
 
     card.innerHTML = '<div class="weather-loc" style="display:flex;align-items:center;">' + alertDot + 'km ' + routeKm + '</div>'
-      + '<div class="weather-row">' + svgArrow + '<span style="' + wColor + '">' + windSpd + '</span> km/h</div>'
-      + '<div class="weather-row">' + svgRain  + '<span style="' + pColor + '">' + prec    + '</span> mm</div>'
-      + '<div class="weather-row">' + svgVis   + '<span style="' + vColor + '">' + vis     + '</span> km</div>';
+      + '<div class="weather-row">' + svgArrow + '<span' + wRisk + '>' + windSpd + '</span> km/h</div>'
+      + '<div class="weather-row">' + svgRain  + '<span' + pRisk + '>' + prec    + '</span> mm</div>'
+      + '<div class="weather-row">' + svgVis   + '<span' + vRisk + '>' + vis     + '</span> km</div>';
 
     const markerColor = pt.alert ? riskColor : routeColor;
     const marker = L.circleMarker([pt.lat, pt.lon], {
@@ -2787,7 +2760,7 @@ function clearAll() {
   document.getElementById('hour-label').textContent =
     String(selectedHour).padStart(2, '0') + ':00';
   document.getElementById('settings-panel').classList.remove('open');
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 // ── GPX export ────────────────────────────────────────────────────────────
@@ -2941,7 +2914,7 @@ async function enterCircularMode() {
   }
 
   _circularActive = true;
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
   scheduleAnalyze();
 }
 
@@ -2949,7 +2922,7 @@ function exitCircularMode() {
   if (!_circularActive) return;
 
   _circularActive = false;
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
 }
 
 document.getElementById('btn-circular').addEventListener('click', (e) => {
@@ -2971,8 +2944,7 @@ async function reverseRoute() {
       fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng)
     )
   )).forEach(r => segments.push(buildSegment(r)));
-  updateBottomBar();
-  renderWaypointList(); updateCircularBtn();
+  refreshUI();
   scheduleAnalyze();
 }
 
