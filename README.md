@@ -14,9 +14,9 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 |---|---|
 | ![Risk segments](screenshots/risk.png) | ![Weather forecast](screenshots/weather.png) |
 
-| Elevation profile | Route builder |
+| Elevation profile | Themes |
 |---|---|
-| ![Elevation profile](screenshots/elevation.png) | ![Themes](screenshots/themes.png) |
+| ![Elevation profile](screenshots/elevation.png) | ![Themes](screenshots/themes-v2.png) |
 
 ## What it does
 
