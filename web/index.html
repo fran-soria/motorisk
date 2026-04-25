@@ -19,6 +19,7 @@
     :root {
       --bg:           #111113;
       --surface:      rgba(28,28,30,0.92);
+      --surface-solid: #1c1c1e;
       --border:       rgba(255,255,255,0.10);
       --text:         #f5f5f7;
       --muted:        #98989d;
@@ -540,21 +541,28 @@
 
     /* ── Results panel ── */
     #results-panel {
-      top: 0; right: 0;
-      width: 300px; height: 100%;
+      top: 16px; right: 16px;
+      width: 300px;
+      max-height: calc(100vh - 32px);
       background: var(--surface);
       backdrop-filter: var(--blur);
       -webkit-backdrop-filter: var(--blur);
-      border-left: 0.5px solid var(--border);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.10), 0 8px 24px rgba(0,0,0,0.10);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transform: translateX(100%);
+      transform: translateX(calc(100% + 24px));
       transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 1001;
     }
 
     #results-panel.open { transform: translateX(0); }
+
+    /* Suppress card entrance animations when re-rendering an already-open panel */
+    #results-panel.no-anim .segment-card,
+    #results-panel.no-anim .weather-card { animation: none; }
 
     /* ── Settings panel ── */
     #settings-clip {
@@ -867,7 +875,7 @@
     /* ── Route actions panel ── */
     #route-actions {
       display: flex;
-      gap: 6px;
+      gap: 5px;
       pointer-events: auto;
       max-width: 220px;
       padding-left: 22px;
@@ -942,6 +950,61 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #btn-circular.active svg { animation: spin 8s linear infinite; }
     #btn-circular.active:hover { background: var(--text); }
+    #btn-curves:hover { color: var(--text); }
+    #btn-curves.fast {
+      background: var(--accent-route);
+      color: var(--bg);
+    }
+    #btn-curves.fast:hover { background: var(--text); }
+    #btn-curves.curvy {
+      background: var(--accent-risk);
+      color: var(--bg);
+    }
+    #btn-curves.curvy:hover { background: var(--text); }
+    #curves-flyout {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      display: flex;
+      align-items: stretch;
+      gap: 3px;
+      background: var(--surface-solid);
+      border: 0.5px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      pointer-events: none;
+      clip-path: inset(0 100% 0 0 round 8px);
+      transition: clip-path 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 10;
+    }
+    #curves-flyout.open {
+      clip-path: inset(0 0% 0 0 round 8px);
+      pointer-events: auto;
+    }
+    .curve-opt {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 4px 10px;
+      transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+      font-size: 9px;
+      font-weight: 500;
+      font-family: var(--sans);
+      line-height: 1;
+    }
+    .curve-opt:hover { background: var(--bg); color: var(--text); }
+    .curve-opt.active { background: var(--accent-route); color: var(--bg); }
+    .curve-opt[data-mode="curvy"].active { background: var(--accent-risk); color: var(--bg); }
     #gpx-stack {
       display: flex;
       flex-direction: column;
@@ -1023,7 +1086,11 @@
   <div id="waypoint-list"></div>
   <div id="route-actions">
     <div id="route-features">
-      <button class="route-feature-btn" disabled data-tooltip="Próximamente"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-spline-icon lucide-spline"><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><path d="M5 17A12 12 0 0 1 17 5"/></svg></button>
+      <button class="route-feature-btn" id="btn-curves">
+         <svg data-icon="balanced" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scale-icon lucide-scale"><path d="M12 3v18"/><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M7 21h10"/></svg>
+        <svg data-icon="fast" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer-icon lucide-timer"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>
+        <svg data-icon="curvy" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-line-squiggle-icon lucide-line-squiggle"><path d="M7 3.5c5-2 7 2.5 3 4C1.5 10 2 15 5 16c5 2 9-10 14-7s.5 13.5-4 12c-5-2.5.5-11 6-2"/></svg>
+      </button>
       <button class="route-feature-btn" data-tooltip="Ruta circular" id="btn-circular"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
       <button class="route-feature-btn" disabled data-tooltip="Invertir ruta" id="btn-reverse"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right-left-icon lucide-arrow-right-left"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>
     </div>
@@ -1031,6 +1098,20 @@
       <button id="btn-import-gpx" data-tooltip="Importar GPX"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-import-icon lucide-import"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/></svg></button>
       <button id="btn-export-gpx" disabled data-tooltip="Exportar GPX"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-arrow-right-exit-icon lucide-square-arrow-right-exit"><path d="M10 12h11"/><path d="m17 16 4-4-4-4"/><path d="M21 6.344V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-1.344"/></svg></button>
       <input type="file" id="gpx-file-input" accept=".gpx" style="display:none">
+    </div>
+    <div id="curves-flyout">
+      <button class="curve-opt" data-mode="balanced">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scale-icon lucide-scale"><path d="M12 3v18"/><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M7 21h10"/></svg>
+        <span>Equilibrada</span>
+      </button>
+      <button class="curve-opt" data-mode="fast">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer-icon lucide-timer"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>
+        <span>Rápida</span>
+      </button>
+      <button class="curve-opt" data-mode="curvy">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-line-squiggle-icon lucide-line-squiggle"><path d="M7 3.5c5-2 7 2.5 3 4C1.5 10 2 15 5 16c5 2 9-10 14-7s.5 13.5-4 12c-5-2.5.5-11 6-2"/></svg>
+        <span>Curvas</span>
+      </button>
     </div>
   </div>
 </div>
@@ -1151,6 +1232,7 @@ const THEMES = {
     tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     bg: '#f0f4f8',
     surface: 'rgba(0,102,177,0.10)',
+    surfaceSolid: '#bdcfda',
     text: '#060c14',
     muted: '#406080',
     border: 'rgba(0,102,177,0.14)',
@@ -1166,6 +1248,7 @@ const THEMES = {
     tiles: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     bg: '#f7f3e8',
     surface: 'rgba(139,105,20,0.12)',
+    surfaceSolid: '#c7cdc8',
     text: '#141008',
     muted: '#7a6030',
     border: 'rgba(139,105,20,0.16)',
@@ -1181,6 +1264,7 @@ const THEMES = {
     tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     bg: '#030a04',
     surface: 'rgba(75,158,0,0.18)',
+    surfaceSolid: '#2d3c25',
     text: '#e0f0e0',
     muted: '#72aa78',
     border: 'rgba(75,158,0,0.22)',
@@ -1196,6 +1280,7 @@ const THEMES = {
     tiles: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     bg: '#0f0800',
     surface: 'rgba(244,121,32,0.18)',
+    surfaceSolid: '#4c3527',
     text: '#faeee0',
     muted: '#c28c58',
     border: 'rgba(244,121,32,0.22)',
@@ -1213,6 +1298,7 @@ function applyThemeCSSVars(theme) {
   const root = document.documentElement;
   root.style.setProperty('--bg',           theme.bg);
   root.style.setProperty('--surface',      theme.surface);
+  root.style.setProperty('--surface-solid', theme.surfaceSolid);
   root.style.setProperty('--text',         theme.text);
   root.style.setProperty('--muted',        theme.muted);
   root.style.setProperty('--border',       theme.border);
@@ -1296,6 +1382,10 @@ const btnAnalyze     = document.getElementById('btn-analyze');
 const btnClear       = document.getElementById('btn-clear');
 const btnExportGPX   = document.getElementById('btn-export-gpx');
 const btnReverse     = document.getElementById('btn-reverse');
+const btnCurves      = document.getElementById('btn-curves');
+const curvesFlyout   = document.getElementById('curves-flyout');
+const CURVE_MODES    = ['balanced', 'fast', 'curvy'];
+const CURVE_TOOLTIPS = { balanced: 'Ruta equilibrada', fast: 'Ruta más rápida', curvy: 'Ruta con más curvas' };
 const gpxFileInput   = document.getElementById('gpx-file-input');
 const resultsPanel   = document.getElementById('results-panel');
 const btnClosePanel  = document.getElementById('btn-close-panel');
@@ -1399,6 +1489,7 @@ let _circularActive     = false;
 let _circularPreviewCircle  = null;
 let _nextWpId           = 0;
 let _circularPreviewMarker  = null;
+let _curvatureMode      = 'balanced'; // 'fast' | 'balanced' | 'curvy' 
 
 // ── Onboarding tutorial ─────────────────────────────────────────────────────
 const tutorialBrandEl    = document.getElementById('brand');
@@ -1666,7 +1757,7 @@ async function fetchRoadSegment(from, to, signal) {
     res = await fetch(`${API}/route/geometry`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to }),
+      body: JSON.stringify({ from, to, mode: _curvatureMode }),
       ...(signal ? { signal } : {}),
     });
   } catch (err) {
@@ -1678,16 +1769,17 @@ async function fetchRoadSegment(from, to, signal) {
     return null;
   }
   const data = await res.json();
-  return { geometry: { type: 'LineString', coordinates: data.coordinates }, distance: data.distance };
+  return { geometry: { type: 'LineString', coordinates: data.coordinates }, distance: data.distance, curvatureGain: data.curvature_gain ?? 0 };
 }
 
 function buildSegment(result) {
   if (!result) return null;
   const color = cssVar('--accent-route');
+  const gain = result.curvatureGain ?? 0;
   const layer = L.geoJSON(result.geometry, {
-    style: { color, weight: 2, opacity: 0.85, dashArray: '6 4' },
+    style: { color, weight: 2, dashArray: '6 4' },
   }).addTo(map);
-  return { coords: result.geometry.coordinates, layer, distance: result.distance };
+  return { coords: result.geometry.coordinates, layer, distance: result.distance, curvatureGain: gain };
 }
 
 // ── Marker ─────────────────────────────────────────────────────────────────
@@ -1937,6 +2029,7 @@ function refreshUI() {
   updateBottomBar();
   renderWaypointList();
   updateCircularBtn();
+  updateCurvatureBtn();
 }
 
 function renderWaypointList() {
@@ -2002,6 +2095,23 @@ function renderWaypointList() {
       item.addEventListener('dragstart', (e) => {
         _dragSrcIndex = i;
         e.dataTransfer.effectAllowed = 'move';
+        // Chromium/WebKit on macOS fails to snapshot elements with
+        // backdrop-filter, leaving the drag image stuck to the cursor.
+        // Provide an explicit drag image from a filter-less clone.
+        const rect = box.getBoundingClientRect();
+        const ghost = box.cloneNode(true);
+        ghost.style.cssText += `
+          position: fixed; top: -9999px; left: -9999px;
+          width: ${rect.width}px; height: ${rect.height}px;
+          backdrop-filter: none; -webkit-backdrop-filter: none;
+          background: var(--bg); pointer-events: none;
+        `;
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, e.clientX - rect.left, e.clientY - rect.top);
+        setTimeout(() => ghost.remove(), 0);
+      });
+      item.addEventListener('dragend', () => {
+        _dragSrcIndex = null;
       });
       item.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -2365,9 +2475,11 @@ async function analyzeRoute() {
   _analyzeController = new AbortController();
   const { signal } = _analyzeController;
 
+  const wasOpen = resultsPanel.classList.contains('open');
+
   btnAnalyze.disabled = true;
   btnAnalyze.innerHTML = '<span style="animation:pulse 1.2s ease-in-out infinite">Analizando</span>';
-  clearResults();
+  if (!wasOpen) clearResults();
   document.querySelectorAll('.panel-error').forEach(el => el.remove());
   document.getElementById('section-risk').style.display      = '';
   document.getElementById('section-elevation').style.display = '';
@@ -2414,6 +2526,11 @@ async function analyzeRoute() {
   resultsPanel.classList.add('open');
   document.body.classList.add('panel-open');
 
+  if (wasOpen) {
+    resultsPanel.classList.add('no-anim');
+    clearResults();
+  }
+
   if (allFailed) {
     const p = document.createElement('p');
     p.className = 'panel-error';
@@ -2451,6 +2568,10 @@ async function analyzeRoute() {
 
   btnAnalyze.disabled = false;
   btnAnalyze.innerHTML = 'Analizar ruta';
+
+  if (wasOpen) {
+    requestAnimationFrame(() => resultsPanel.classList.remove('no-anim'));
+  }
 }
 
 btnAnalyze.addEventListener('click', analyzeRoute);
@@ -2949,6 +3070,85 @@ async function reverseRoute() {
 }
 
 btnReverse.addEventListener('click', reverseRoute);
+
+// ── Modo curvas ─────────────────────────────────────────────────────────────
+
+function updateCurvatureBtn() {
+  if (!btnCurves) return;
+  btnCurves.classList.remove('fast', 'curvy');
+  if (_curvatureMode !== 'balanced') btnCurves.classList.add(_curvatureMode);
+  btnCurves.dataset.tooltip = CURVE_TOOLTIPS[_curvatureMode];
+  btnCurves.querySelectorAll('svg[data-icon]').forEach(svg => {
+    svg.style.display = svg.dataset.icon === _curvatureMode ? '' : 'none';
+  });
+}
+
+async function applyCurvatureMode() {
+  if (waypoints.length < 2) return;
+  segments.forEach(seg => { if (seg?.layer) map.removeLayer(seg.layer); });
+  const results = await Promise.all(
+    Array.from({ length: waypoints.length - 1 }, (_, i) =>
+      fetchRoadSegment(waypoints[i].latlng, waypoints[i + 1].latlng)
+    )
+  );
+  segments.length = 0;
+  results.forEach(r => segments.push(buildSegment(r)));
+  refreshUI();
+  scheduleAnalyze();
+
+  /*
+  if (_curvatureMode !== 'fast') {
+    const valid  = segments.filter(Boolean);
+    const noGain = valid.filter(s => s.curvatureGain < 0.1).length;
+    if (noGain > 0) {
+      const msg = noGain === valid.length
+        ? 'Sin rutas más sinuosas disponibles en este tramo'
+        : `${valid.length - noGain} de ${valid.length} tramos con curvas · ${noGain} sin mejora`;
+      showBottomBarError(msg);
+    }
+  } 
+  */
+}
+
+let _curvesOpen = false;
+
+function openCurvesFlyout() {
+  const btnRect     = btnCurves.getBoundingClientRect();
+  const actionsRect = document.getElementById('route-actions').getBoundingClientRect();
+  curvesFlyout.style.left = (btnRect.left - actionsRect.left) + 'px';
+  document.querySelectorAll('.curve-opt').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === _curvatureMode);
+  });
+  _curvesOpen = true;
+  curvesFlyout.classList.add('open');
+}
+
+function closeCurvesFlyout() {
+  curvesFlyout.classList.remove('open');
+  _curvesOpen = false;
+}
+
+btnCurves.addEventListener('click', () => {
+  _curvesOpen ? closeCurvesFlyout() : openCurvesFlyout();
+});
+
+document.querySelectorAll('.curve-opt').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const newMode = btn.dataset.mode;
+    closeCurvesFlyout();
+    if (newMode === _curvatureMode) return;
+    _curvatureMode = newMode;
+    updateCurvatureBtn();
+    await applyCurvatureMode();
+  });
+});
+
+document.addEventListener('click', (e) => {
+  if (_curvesOpen && !e.target.closest('#btn-curves') && !e.target.closest('#curves-flyout')) {
+    closeCurvesFlyout();
+  }
+});
 </script>
 </body>
 </html>

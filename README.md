@@ -8,8 +8,19 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 
 **Live at [motorisk.app](https://motorisk.app)**
 
-![motorisk — tramos de riesgo](screenshots/tramos-riesgo.png)
-![motorisk — condiciones meteorológicas](screenshots/condiciones-meteo.png)
+## Screenshots
+
+| Risk segments | Weather forecast |
+|---|---|
+| ![Risk segments](screenshots/tramos-riesgo.png) | ![Weather forecast](screenshots/condiciones-meteo.png) |
+
+| Elevation profile | Route builder |
+|---|---|
+| <!-- screenshot: perfil de elevación con el gráfico interactivo visible --> | <!-- screenshot: panel lateral con waypoints, búsqueda abierta o parada intermedia --> |
+
+| Circular mode | Themes |
+|---|---|
+| <!-- screenshot: ruta en bucle con el botón de modo circular activo --> | <!-- screenshot: comparativa o collage de temas claro/oscuro --> |
 
 ## What it does
 
@@ -21,6 +32,14 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 
 **Elevation profile** samples the route geometry and queries the Open-Meteo Elevation API (Copernicus DEM GLO-90, 90 m resolution) to render an interactive profile chart with min/max altitude, cumulative gain, and weather alert markers.
 
+## Route building
+
+Routes are built waypoint by waypoint. Click the map or search for a place by name — each new point snaps to the nearest road and a new segment is fetched from OSRM. Waypoints can be dragged on the map to adjust the route, reordered in the sidebar by dragging the handle, or deleted individually. Inserting a stop between two existing waypoints is also supported, up to a maximum of 10 waypoints per route.
+
+The search box uses [Photon](https://photon.komoot.io) for forward geocoding and reverse geocoding for human-readable names when dropping a pin. Keyboard navigation works throughout: arrow keys move through results, Enter selects, Escape cancels. Device geolocation is available via the location button in each slot.
+
+A circular mode closes the route back to the starting point — useful for loop rides. The reverse button flips waypoint order and rebuilds all segments in parallel, so the map updates all at once rather than one segment at a time.
+
 ## Stack
 
 | Layer | Tech |
@@ -28,6 +47,7 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 | API | Go (`net/http`, no framework) |
 | Spatial queries | PostgreSQL 17 + PostGIS 3.5 |
 | Routing | OSRM (self-hosted, MLD algorithm) |
+| Geocoding | Photon (Komoot, OpenStreetMap-based) |
 | Road data | OpenStreetMap via Geofabrik |
 | Risk data | DGT - Punto de Acceso Nacional (DATEX2) |
 | Weather & elevation | Open-Meteo |
@@ -42,10 +62,12 @@ POST /route/weather    →  Open-Meteo hourly/current forecast per sampled point
 POST /route/elevation  →  Open-Meteo Elevation API (Copernicus DEM GLO-90)
 POST /route/snap       →  OSRM nearest: snaps a point to the road network
 POST /route/geometry   →  OSRM route: road geometry between two points
+POST /route/geocode    →  Photon forward geocoding (place name to coordinates)
+POST /route/reverse    →  Photon reverse geocoding (coordinates to place name)
 GET  /health           →  liveness check
 ```
 
-The frontend calls the first three endpoints in parallel via `Promise.all` after the user draws a route. Road-snapping and geometry fetching go through the backend. OSRM is not exposed publicly. Open-Meteo responses are cached in memory (elevation: permanent, weather: 10 min) to avoid rate limits.
+After the user draws a route, the frontend fires `/route/segments`, `/route/weather`, and `/route/elevation` in parallel via `Promise.all`. Road-snapping and geometry fetching go through the backend so OSRM is never exposed publicly. Open-Meteo responses are cached in an LRU memory cache (elevation: no expiry, weather: 10 min TTL, max 1000 entries) to avoid redundant requests.
 
 ## Spatial query
 
@@ -147,6 +169,7 @@ See `.env.example`:
 | `DATABASE_URL` | PostgreSQL connection string | `postgres://motorisk:motorisk@localhost:5432/motorisk` |
 | `OSRM_URL` | OSRM server base URL | `http://192.168.64.2:5000` |
 | `PORT` | API port | `8080` |
+| `CORS_ORIGIN` | Allowed CORS origin | `*` (dev) or `https://motorisk.app` (prod) |
 
 With Colima, the VM is typically accessible at `192.168.64.2` rather than `localhost`. Run `colima ls` to confirm.
 
@@ -154,6 +177,7 @@ With Colima, the VM is typically accessible at `192.168.64.2` rather than `local
 
 - **DGT risk segments**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas), DATEX2, updated on occurrence
 - **Road network**: [Geofabrik Spain](https://download.geofabrik.de/europe/spain.html) + [Canary Islands](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
+- **Geocoding**: [Photon](https://photon.komoot.io), OpenStreetMap, ODbL
 - **Weather & elevation**: [Open-Meteo](https://open-meteo.com), free for non-commercial use
 
 ## Themes
@@ -169,6 +193,10 @@ Six colour themes based on iconic motorcycles, each referencing original factory
 | Honda CB750 | Candy Ruby Red R4C · 1969 | Light |
 | BMW M1000RR | M Motorsport · 2021 | Light |
 
+## Security
+
+nginx serves the app with a full set of security headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy). The Leaflet scripts loaded from unpkg.com have SRI integrity hashes so any tampered file gets blocked by the browser. The API enforces a 30 req/min per-IP rate limit at the nginx layer and a 1 MB body size cap on all POST endpoints. CORS origin is configurable via `CORS_ORIGIN` so the production deployment only accepts requests from `motorisk.app`.
+
 ## Limitations
 
 - DGT data covers the national road network only (excludes Catalonia and the Basque Country for most datasets).
@@ -180,7 +208,7 @@ Six colour themes based on iconic motorcycles, each referencing original factory
 
 MIT
 
-*Data: DGT · Open-Meteo · OpenStreetMap contributors*
+*Data: DGT · Open-Meteo · OpenStreetMap contributors · Photon (Komoot)*
 
 ---
 
@@ -194,15 +222,19 @@ Herramienta de análisis de rutas para motoristas en España. Traza una ruta en 
 
 **En producción en [motorisk.app](https://motorisk.app)**
 
+Ver sección Screenshots más arriba.
+
 ## Qué hace
 
-**Tramos de riesgo:** ingesta el feed DATEX2 oficial de la DGT de tramos de elevado riesgo para motocicletas y los almacena en PostGIS. Al enviar una ruta, una query de intersección espacial devuelve cada tramo señalizado que cruza tu ruta.
+**Tramos de riesgo** ingesta el feed DATEX2 oficial de la DGT de tramos de elevado riesgo para motocicletas y los almacena en PostGIS. Al enviar una ruta, una query de intersección espacial devuelve cada tramo señalizado que cruza tu ruta, con el nombre de la carretera, la provincia y el punto kilométrico.
 
-**Geometría real de carretera:** las rutas se ajustan a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium. Los waypoints se snapean a la carretera más cercana al hacer click. OSRM no está expuesto públicamente, ya que el backend actúa como proxy.
+**Geometría real de carretera** ajusta las rutas a carreteras reales mediante una instancia self-hosted de OSRM construida con datos de OpenStreetMap para la península y las Islas Canarias, fusionados en un único grafo de routing con osmium. Los waypoints se snapean a la carretera más cercana al hacer click. OSRM no está expuesto públicamente; el backend actúa como proxy.
 
-**Meteorología:** muestrea la ruta cada 50 km y consulta Open-Meteo para obtener velocidad del viento, precipitación y visibilidad. Permite consultar el forecast hasta 7 días vista con resolución horaria. Las alertas se marcan en el mapa y en el perfil de elevación.
+**Construcción de rutas** funciona punto a punto: cada waypoint puede añadirse haciendo click en el mapa o buscando un lugar por nombre mediante geocodificación con Photon. Los waypoints se pueden reordenar arrastrando, borrar individualmente, o editar para insertar una parada intermedia, hasta un máximo de 10 por ruta. El modo circular cierra la ruta sobre el punto de origen. El botón de invertir reconstruye todos los segmentos en paralelo.
 
-**Perfil de elevación:** muestrea la geometría de la ruta y consulta la API de elevación de Open-Meteo (Copernicus DEM GLO-90, resolución 90 m) para renderizar un gráfico interactivo con altitud mínima/máxima, desnivel acumulado y marcadores de alertas meteorológicas.
+**Meteorología** muestrea la ruta cada 50 km y consulta Open-Meteo para obtener velocidad del viento, precipitación y visibilidad. Permite consultar el forecast hasta 7 días vista con resolución horaria. Las alertas se marcan en el mapa y en el perfil de elevación.
+
+**Perfil de elevación** muestrea la geometría de la ruta y consulta la API de elevación de Open-Meteo (Copernicus DEM GLO-90, resolución 90 m) para renderizar un gráfico interactivo con altitud mínima/máxima, desnivel acumulado y marcadores de alertas meteorológicas.
 
 ## Ejecutar en local
 
@@ -210,6 +242,7 @@ Ver la versión en inglés para instrucciones completas. Variables de entorno en
 
 ## Fuentes de datos
 
-- **Tramos de riesgo DGT**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas): DATEX2
+- **Tramos de riesgo DGT**: [Punto de Acceso Nacional](https://nap.dgt.es/dataset/tramos-de-elevado-riesgo-para-motocicletas), DATEX2
 - **Red viaria**: [Geofabrik España](https://download.geofabrik.de/europe/spain.html) + [Canarias](https://download.geofabrik.de/africa/canary-islands.html), OpenStreetMap, ODbL
+- **Geocodificación**: [Photon](https://photon.komoot.io), OpenStreetMap, ODbL
 - **Meteorología y elevación**: [Open-Meteo](https://open-meteo.com)

@@ -49,6 +49,43 @@ type openMeteoLocation struct {
 	} `json:"hourly"`
 }
 
+// bearingDeg returns the initial bearing in degrees from point a to b.
+// Coordinates are [lon, lat] (GeoJSON order).
+func bearingDeg(a, b []float64) float64 {
+	lat1 := a[1] * math.Pi / 180
+	lat2 := b[1] * math.Pi / 180
+	dLon := (b[0] - a[0]) * math.Pi / 180
+	x := math.Sin(dLon) * math.Cos(lat2)
+	y := math.Cos(lat1)*math.Sin(lat2) - math.Sin(lat1)*math.Cos(lat2)*math.Cos(dLon)
+	return math.Atan2(x, y) * 180 / math.Pi
+}
+
+// curvatureScore returns the sum of bearing deltas (degrees) per km for a coordinate sequence.
+// Higher values indicate more sinuous roads.
+func curvatureScore(coords [][]float64) float64 {
+	if len(coords) < 3 {
+		return 0
+	}
+	totalDelta := 0.0
+	for i := 1; i < len(coords)-1; i++ {
+		b1 := bearingDeg(coords[i-1], coords[i])
+		b2 := bearingDeg(coords[i], coords[i+1])
+		delta := math.Abs(b2 - b1)
+		if delta > 180 {
+			delta = 360 - delta
+		}
+		totalDelta += delta
+	}
+	dist := 0.0
+	for i := 1; i < len(coords); i++ {
+		dist += haversineKm(coords[i-1][1], coords[i-1][0], coords[i][1], coords[i][0])
+	}
+	if dist < 0.01 {
+		return 0
+	}
+	return totalDelta / dist
+}
+
 // haversineKm returns the great-circle distance in km between two lat/lon points.
 func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
 	const R = 6371.0
@@ -390,8 +427,9 @@ type snapResponse struct {
 }
 
 type geometryResponse struct {
-	Coordinates [][]float64 `json:"coordinates"`
-	Distance    float64     `json:"distance"`
+	Coordinates   [][]float64 `json:"coordinates"`
+	Distance      float64     `json:"distance"`
+	CurvatureGain float64     `json:"curvature_gain,omitempty"`
 }
 
 type osrmNearestResponse struct {
@@ -459,10 +497,30 @@ func (s *Server) handleSnap(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) fetchOSRMRoute(ctx context.Context, from, to [2]float64, params string) (*osrmRouteResponse, error) {
+	u := fmt.Sprintf("%s/route/v1/driving/%f,%f;%f,%f?%s",
+		s.osrmURL, from[1], from[0], to[1], to[0], params)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result osrmRouteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		From [2]float64 `json:"from"` // [lat, lon]
 		To   [2]float64 `json:"to"`   // [lat, lon]
+		Mode string     `json:"mode"` // "" | "fast" | "balanced" | "curvy"
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -472,15 +530,12 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	geometryURL := fmt.Sprintf("%s/route/v1/driving/%f,%f;%f,%f?geometries=geojson&overview=full",
-		s.osrmURL, body.From[1], body.From[0], body.To[1], body.To[0])
-
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, geometryURL, nil)
-	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
-		return
+	params := "geometries=geojson&overview=full"
+	if body.Mode == "balanced" || body.Mode == "curvy" {
+		params += "&exclude=motorway&alternatives=3"
 	}
-	resp, err := s.httpClient.Do(req)
+
+	result, err := s.fetchOSRMRoute(r.Context(), body.From, body.To, params)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -488,12 +543,17 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error consultando OSRM", http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
 
-	var result osrmRouteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		http.Error(w, "error procesando respuesta OSRM", http.StatusBadGateway)
-		return
+	// If non-motorway mode yields no route (e.g. motorway unavoidable), fall back to direct.
+	if result.Code != "Ok" && (body.Mode == "balanced" || body.Mode == "curvy") {
+		result, err = s.fetchOSRMRoute(r.Context(), body.From, body.To, "geometries=geojson&overview=full")
+		if err != nil {
+			if r.Context().Err() != nil {
+				return
+			}
+			http.Error(w, "error consultando OSRM", http.StatusBadGateway)
+			return
+		}
 	}
 
 	if result.Code != "Ok" || len(result.Routes) == 0 {
@@ -501,10 +561,47 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chosen := result.Routes[0]
+	var curvatureGain float64
+
+	if (body.Mode == "balanced" || body.Mode == "curvy") && len(result.Routes) > 1 {
+		directScore := curvatureScore(result.Routes[0].Geometry.Coordinates)
+		// "curvy" picks the absolute most sinuous route; "balanced" picks the
+		// best curvature-per-distance ratio (sinuosity that costs few extra km).
+		bestIdx := 0
+		var bestMetric float64
+		if body.Mode == "balanced" && result.Routes[0].Distance > 0 {
+			bestMetric = directScore / result.Routes[0].Distance
+		} else {
+			bestMetric = directScore
+		}
+		for i, route := range result.Routes {
+			sc := curvatureScore(route.Geometry.Coordinates)
+			var metric float64
+			if body.Mode == "balanced" {
+				if route.Distance <= 0 {
+					continue
+				}
+				metric = sc / route.Distance
+			} else {
+				metric = sc
+			}
+			if metric > bestMetric {
+				bestMetric = metric
+				bestIdx = i
+			}
+		}
+		chosen = result.Routes[bestIdx]
+		if directScore > 0 {
+			curvatureGain = (curvatureScore(chosen.Geometry.Coordinates) - directScore) / directScore
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(geometryResponse{
-		Coordinates: result.Routes[0].Geometry.Coordinates,
-		Distance:    result.Routes[0].Distance,
+		Coordinates:   chosen.Geometry.Coordinates,
+		Distance:      chosen.Distance,
+		CurvatureGain: curvatureGain,
 	})
 }
 
