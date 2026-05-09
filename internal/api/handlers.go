@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type segmentResponse struct {
@@ -125,9 +127,13 @@ func sampleCoords(coords [][2]float64) [][2]float64 {
 	for i := 1; i < len(coords); i++ {
 		d := haversineKm(coords[i-1][1], coords[i-1][0], coords[i][1], coords[i][0])
 		accumulated += d
+		pushed := false
 		for accumulated >= nextTarget-1e-9 && len(result) < n-1 {
-			result = append(result, coords[i])
 			nextTarget += interval
+			pushed = true
+		}
+		if pushed {
+			result = append(result, coords[i])
 		}
 	}
 
@@ -268,13 +274,13 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 			}
 			windSpd = loc.Hourly.WindSpeed10m[h]
 			windDir = loc.Hourly.WindDirection10m[h]
-			prec    = loc.Hourly.Precipitation[h]
-			vis     = loc.Hourly.Visibility[h] / 1000
+			prec = loc.Hourly.Precipitation[h]
+			vis = loc.Hourly.Visibility[h] / 1000
 		} else {
 			windSpd = loc.Current.WindSpeed10m
 			windDir = loc.Current.WindDirection10m
-			prec    = loc.Current.Precipitation
-			vis     = loc.Current.Visibility / 1000
+			prec = loc.Current.Precipitation
+			vis = loc.Current.Visibility / 1000
 		}
 		pt := weatherPoint{
 			RouteKm:          km,
@@ -530,23 +536,38 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := "geometries=geojson&overview=full"
-	if body.Mode == "balanced" || body.Mode == "curvy" {
-		params += "&exclude=motorway&alternatives=3"
-	}
+	baseParams := "geometries=geojson&overview=full"
 
-	result, err := s.fetchOSRMRoute(r.Context(), body.From, body.To, params)
-	if err != nil {
-		if r.Context().Err() != nil {
+	var result, directResult *osrmRouteResponse
+
+	if body.Mode == "balanced" || body.Mode == "curvy" {
+		// Fetch non-motorway alternatives and the true fast route in parallel.
+		// directResult is used both as fallback and as the curvatureGain baseline.
+		g, gctx := errgroup.WithContext(r.Context())
+		g.Go(func() error {
+			var err error
+			result, err = s.fetchOSRMRoute(gctx, body.From, body.To, baseParams+"&exclude=motorway&alternatives=3")
+			return err
+		})
+		g.Go(func() error {
+			var err error
+			directResult, err = s.fetchOSRMRoute(gctx, body.From, body.To, baseParams)
+			return err
+		})
+		if err := g.Wait(); err != nil {
+			if r.Context().Err() != nil {
+				return
+			}
+			http.Error(w, "error consultando OSRM", http.StatusBadGateway)
 			return
 		}
-		http.Error(w, "error consultando OSRM", http.StatusBadGateway)
-		return
-	}
-
-	// If non-motorway mode yields no route (e.g. motorway unavoidable), fall back to direct.
-	if result.Code != "Ok" && (body.Mode == "balanced" || body.Mode == "curvy") {
-		result, err = s.fetchOSRMRoute(r.Context(), body.From, body.To, "geometries=geojson&overview=full")
+		// If non-motorway alternatives unavailable (e.g. motorway unavoidable), fall back to direct.
+		if result.Code != "Ok" {
+			result = directResult
+		}
+	} else {
+		var err error
+		result, err = s.fetchOSRMRoute(r.Context(), body.From, body.To, baseParams)
 		if err != nil {
 			if r.Context().Err() != nil {
 				return
@@ -565,15 +586,14 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 	var curvatureGain float64
 
 	if (body.Mode == "balanced" || body.Mode == "curvy") && len(result.Routes) > 1 {
-		directScore := curvatureScore(result.Routes[0].Geometry.Coordinates)
 		// "curvy" picks the absolute most sinuous route; "balanced" picks the
 		// best curvature-per-distance ratio (sinuosity that costs few extra km).
 		bestIdx := 0
 		var bestMetric float64
 		if body.Mode == "balanced" && result.Routes[0].Distance > 0 {
-			bestMetric = directScore / result.Routes[0].Distance
+			bestMetric = curvatureScore(result.Routes[0].Geometry.Coordinates) / (result.Routes[0].Distance / 1000)
 		} else {
-			bestMetric = directScore
+			bestMetric = curvatureScore(result.Routes[0].Geometry.Coordinates)
 		}
 		for i, route := range result.Routes {
 			sc := curvatureScore(route.Geometry.Coordinates)
@@ -582,7 +602,7 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 				if route.Distance <= 0 {
 					continue
 				}
-				metric = sc / route.Distance
+				metric = sc / (route.Distance / 1000)
 			} else {
 				metric = sc
 			}
@@ -592,8 +612,11 @@ func (s *Server) handleGeometry(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		chosen = result.Routes[bestIdx]
-		if directScore > 0 {
-			curvatureGain = (curvatureScore(chosen.Geometry.Coordinates) - directScore) / directScore
+		if directResult != nil && directResult.Code == "Ok" && len(directResult.Routes) > 0 {
+			directScore := curvatureScore(directResult.Routes[0].Geometry.Coordinates)
+			if directScore > 0 {
+				curvatureGain = (curvatureScore(chosen.Geometry.Coordinates) - directScore) / directScore
+			}
 		}
 	}
 

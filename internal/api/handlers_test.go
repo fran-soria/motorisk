@@ -99,15 +99,27 @@ func TestSampleCoords_denseMediumRoute(t *testing.T) {
 func TestSampleCoords_atLeastTwo(t *testing.T) {
 	// Any route with ≥ 2 coords must return ≥ 2 samples.
 	cases := [][][2]float64{
-		lineCoords(40.0, 0.001, 2),  // very short
-		lineCoords(40.0, 0.01, 2),   // short
-		lineCoords(40.0, 0.5, 2),    // medium
-		lineCoords(40.0, 1.0, 2),    // longer
+		lineCoords(40.0, 0.001, 2), // very short
+		lineCoords(40.0, 0.01, 2),  // short
+		lineCoords(40.0, 0.5, 2),   // medium
+		lineCoords(40.0, 1.0, 2),   // longer
 	}
 	for _, in := range cases {
 		out := sampleCoords(in)
 		if len(out) < 2 {
 			t.Errorf("input len %d: expected ≥2 samples, got %d", len(in), len(out))
+		}
+	}
+}
+
+func TestSampleCoords_longSingleSegment(t *testing.T) {
+	// ~111 km in a single segment -> n=3, interval≈55.5
+	// middle vortex should not appear twice
+	in := [][2]float64{{0, 40.0}, {0, 41.5}, {0, 41.501}}
+	out := sampleCoords(in)
+	for i := 1; i < len(out); i++ {
+		if out[i] == out[i-1] {
+			t.Errorf("punto duplicado en indice %d: %v", i, out[i])
 		}
 	}
 }
@@ -120,13 +132,13 @@ func TestValidLatLon(t *testing.T) {
 		want     bool
 	}{
 		{0, 0, true},
-		{40.4, -3.7, true},   // Madrid
-		{90, 180, true},      // corner
-		{-90, -180, true},    // corner
-		{90.1, 0, false},     // lat too high
-		{-90.1, 0, false},    // lat too low
-		{0, 180.1, false},    // lon too high
-		{0, -180.1, false},   // lon too low
+		{40.4, -3.7, true}, // Madrid
+		{90, 180, true},    // corner
+		{-90, -180, true},  // corner
+		{90.1, 0, false},   // lat too high
+		{-90.1, 0, false},  // lat too low
+		{0, 180.1, false},  // lon too high
+		{0, -180.1, false}, // lon too low
 		{999, 999, false},
 	}
 	for _, c := range cases {
