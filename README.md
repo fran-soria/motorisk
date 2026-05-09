@@ -32,11 +32,11 @@ Route analysis tool for motorcyclists in Spain. Draw a route on the map and get 
 
 ## Route building
 
-Routes are built waypoint by waypoint. Click the map or search for a place by name — each new point snaps to the nearest road and a new segment is fetched from OSRM. Waypoints can be dragged on the map to adjust the route, reordered in the sidebar by dragging the handle, or deleted individually. Inserting a stop between two existing waypoints is also supported, up to a maximum of 10 waypoints per route.
+Routes are built waypoint by waypoint. Click the map or search for a place by name. Each new point snaps to the nearest road and a new segment is fetched from OSRM. Waypoints can be dragged on the map to adjust the route, reordered in the sidebar by dragging the handle, or deleted individually. Inserting a stop between two existing waypoints is also supported, up to a maximum of 10 waypoints per route.
 
 The search box uses [Photon](https://photon.komoot.io) for forward geocoding and reverse geocoding for human-readable names when dropping a pin. Keyboard navigation works throughout: arrow keys move through results, Enter selects, Escape cancels. Device geolocation is available via the location button in each slot.
 
-A circular mode closes the route back to the starting point — useful for loop rides. The reverse button flips waypoint order and rebuilds all segments in parallel, so the map updates all at once rather than one segment at a time.
+A circular mode closes the route back to the starting point, useful for loop rides. The reverse button flips waypoint order and rebuilds all segments in parallel, so the map updates all at once rather than one segment at a time.
 
 ## Stack
 
@@ -218,7 +218,7 @@ MIT
 
 Herramienta de análisis de rutas para motoristas en España. Traza una ruta en el mapa y obtén los tramos de alto riesgo de la DGT, la geometría real de la carretera vía OSRM, las condiciones meteorológicas y un perfil de elevación interactivo.
 
-**En producción en [motorisk.app](https://motorisk.app)**
+**Disponible en [motorisk.app](https://motorisk.app)**
 
 Ver sección Screenshots más arriba.
 
